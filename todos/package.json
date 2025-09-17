@@ -1,0 +1,15 @@
+{
+  "name": "obsidian-eisenhower-todos",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "build": "esbuild main.ts --bundle --external:obsidian --format=cjs --platform=node --outfile=main.js --sourcemap",
+    "dev": "esbuild main.ts --bundle --watch --external:obsidian --format=cjs --platform=node --outfile=main.js --sourcemap"
+  },
+  "devDependencies": {
+    "esbuild": "^0.23.0",
+    "typescript": "^5.4.0",
+    "@types/node": "^20.11.0",
+    "obsidian": "latest"
+  }
+}

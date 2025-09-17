@@ -1,0 +1,10 @@
+{
+  "id": "eisenhower-todos",
+  "name": "Eisenhower TODOs",
+  "version": "1.0.0",
+  "minAppVersion": "1.5.0",
+  "description": "把文档中的 TODO 显示为艾森豪威尔四象限：重要/紧急分类，展示创建与截止时间。",
+  "author": "Jiangjie Chen",
+  "authorUrl": "https://jiangjiechen.github.io",
+  "isDesktopOnly": false
+}

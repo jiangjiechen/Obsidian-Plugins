@@ -1,0 +1,357 @@
+/* ===== 布局：四象限容器 ===== */
+.eisenhower-view {
+  height: 100vh;
+  max-height: 100vh;
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  grid-template-rows: repeat(2, minmax(200px, 1fr));
+  gap: 12px;
+  padding: 12px;
+  box-sizing: border-box;
+  overflow: hidden;
+}
+
+.eisenhower-panel {
+  --panel-bg: var(--background-secondary);
+  --panel-border: var(--background-modifier-border);
+  --panel-hover: var(--background-modifier-hover);
+  --text-dim: var(--text-muted);
+  border: 1px solid var(--panel-border);
+  border-radius: 14px;
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  max-height: 100%;
+  overflow: hidden;
+  background: color-mix(in oklab, var(--panel-bg) 80%, transparent);
+  transition: border-color .15s ease, box-shadow .15s ease, background .15s ease;
+}
+
+.eisenhower-panel.drop-target {
+  border-color: var(--interactive-accent);
+  box-shadow: 0 0 0 3px color-mix(in oklab, var(--interactive-accent) 30%, transparent);
+}
+
+/* 轻微色块背景，增强区分但不刺眼 */
+.q-IU   { background: color-mix(in oklab, #ffe7e7 22%, var(--background-secondary)); }
+.q-InU  { background: color-mix(in oklab, #fff0cc 22%, var(--background-secondary)); }
+.q-nIU  { background: color-mix(in oklab, #e7f1ff 22%, var(--background-secondary)); }
+.q-nInU { background: color-mix(in oklab, #ebf7eb 22%, var(--background-secondary)); }
+
+.eisenhower-title-row {
+  position: sticky;
+  top: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 2px 8px 2px;
+  background: inherit;
+  z-index: 1;
+}
+
+.eisenhower-title {
+  font-weight: 700;
+  letter-spacing: .2px;
+}
+
+.eisenhower-count-badge {
+  font-size: 12px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--background-modifier-hover);
+  border: 1px solid var(--background-modifier-border);
+}
+
+.eisenhower-list {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 2px 2px 6px 2px;
+  min-height: 0;
+  max-height: calc(100% - 60px);
+  scrollbar-width: thin;
+  scrollbar-color: var(--background-modifier-border) transparent;
+}
+
+/* ===== 卡片：信息层级 + 动效 ===== */
+.eisenhower-card {
+  --card-border: var(--background-modifier-border);
+  --card-bg: var(--background-primary);
+  border: 1px solid var(--card-border);
+  border-radius: 10px;
+  padding: 12px;
+  background: var(--card-bg);
+  box-shadow: 0 1px 3px rgba(0,0,0,.05);
+  transition: all .12s ease;
+  cursor: pointer;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  min-height: 60px;
+  flex-shrink: 0;
+  width: 100%;
+  box-sizing: border-box;
+}
+.eisenhower-card:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(0,0,0,.08);
+  border-color: color-mix(in oklab, var(--interactive-accent) 25%, var(--card-border));
+}
+
+/* 卡片头：仅标题 */
+.card-head {
+  flex: 1;
+  margin-bottom: 8px;
+}
+.task-title {
+  font-weight: 600;
+  line-height: 1.35;
+  font-size: 14px;
+  cursor: pointer;
+  word-wrap: break-word;
+  word-break: break-word;
+  overflow-wrap: break-word;
+  hyphens: auto;
+  color: var(--text-normal);
+  max-width: 100%;
+}
+
+/* 右上角 chips：倒计时、截止日 */
+.chip {
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--background-modifier-border);
+  background: var(--background-modifier-hover);
+  white-space: nowrap;
+}
+.chip-warning {
+  border-color: #c98a00;
+  background: color-mix(in oklab, #fff3cd 60%, var(--background-modifier-hover));
+}
+.chip-danger {
+  border-color: #b42318;
+  background: color-mix(in oklab, #fde2e1 60%, var(--background-modifier-hover));
+}
+.chip-neutral {
+  opacity: .85;
+}
+
+/* 次要信息行：文件、创建时间、标记按钮 */
+.meta-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+  color: var(--text-muted);
+  font-size: 12px;
+  margin-top: 6px;
+  max-width: 100%;
+  overflow: hidden;
+}
+.meta-pill {
+  padding: 2px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--background-modifier-border);
+  background: var(--background-modifier-hover);
+}
+
+/* 操作按钮：更紧凑且有状态 */
+.action-row {
+  margin-top: 8px;
+  display: flex;
+  gap: 6px;
+}
+.btn {
+  font-size: 12px;
+  padding: 4px 8px;
+  border-radius: 8px;
+  border: 1px solid var(--background-modifier-border);
+  background: var(--background-modifier-hover);
+  cursor: pointer;
+  transition: background .12s ease, border-color .12s ease;
+}
+.btn:hover {
+  border-color: var(--interactive-accent);
+}
+.btn-on {
+  border-color: var(--interactive-accent);
+  background: color-mix(in oklab, var(--interactive-accent) 20%, var(--background-modifier-hover));
+}
+
+/* 顶行：勾选框和标题 */
+.card-topline {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.card-done-box {
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+/* 底部：时间chips */
+.card-bottom {
+  display: flex;
+  justify-content: flex-start;
+  margin-top: auto;
+}
+.time-chips {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+  max-width: 100%;
+  overflow: hidden;
+}
+
+/* 密度：紧凑模式 */
+.eis-compact .eisenhower-card { padding: 8px 10px; }
+.eis-compact .task-title { font-weight: 600; }
+
+/* 可拖拽反馈 */
+.eisenhower-card[draggable="true"] { cursor: grab; }
+.eisenhower-card[draggable="true"]:active { cursor: grabbing; }
+
+/* 空状态 */
+.eisenhower-list:empty::after {
+  content: "暂无任务";
+  color: var(--text-muted);
+  font-size: 12px;
+  opacity: .9;
+  padding: 8px;
+}
+
+/* ===== 极简卡片（隐藏次要行，悬浮显操作） ===== */
+.card-min { padding: 8px 10px; }
+.card-min .task-title { font-weight: 600; }
+.card-min .meta-row, .card-min .action-row { display: none !important; }
+
+
+
+/* 日期chip样式优化 */
+.chip {
+  font-size: 10px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  border: 1px solid var(--background-modifier-border);
+  background: var(--background-modifier-hover);
+  white-space: nowrap;
+  font-weight: 500;
+}
+
+/* 逾期状态更醒目 */
+.chip-danger {
+  border-color: #dc2626;
+  background: #fef2f2;
+  color: #dc2626;
+  font-weight: 600;
+}
+
+.chip-warning {
+  border-color: #ea580c;
+  background: #fff7ed;
+  color: #ea580c;
+  font-weight: 600;
+}
+
+.chip-neutral {
+  opacity: .75;
+  font-size: 9px;
+}
+
+/* 合作者和标签chip样式 */
+.chip-collaborator {
+  border-color: #3b82f6;
+  background: #eff6ff;
+  color: #3b82f6;
+  font-weight: 500;
+}
+
+.chip-tag {
+  font-weight: 500;
+  font-size: 10px;
+}
+
+/* 标签chip颜色变量，通过JavaScript动态设置 */
+.chip-tag[data-tag-color="0"] {
+  border-color: #ef4444;
+  background: #fef2f2;
+  color: #ef4444;
+}
+
+.chip-tag[data-tag-color="1"] {
+  border-color: #f97316;
+  background: #fff7ed;
+  color: #f97316;
+}
+
+.chip-tag[data-tag-color="2"] {
+  border-color: #eab308;
+  background: #fefce8;
+  color: #eab308;
+}
+
+.chip-tag[data-tag-color="3"] {
+  border-color: #22c55e;
+  background: #f0fdf4;
+  color: #22c55e;
+}
+
+.chip-tag[data-tag-color="4"] {
+  border-color: #06b6d4;
+  background: #ecfeff;
+  color: #06b6d4;
+}
+
+.chip-tag[data-tag-color="5"] {
+  border-color: #3b82f6;
+  background: #eff6ff;
+  color: #3b82f6;
+}
+
+.chip-tag[data-tag-color="6"] {
+  border-color: #8b5cf6;
+  background: #f5f3ff;
+  color: #8b5cf6;
+}
+
+.chip-tag[data-tag-color="7"] {
+  border-color: #ec4899;
+  background: #fdf2f8;
+  color: #ec4899;
+}
+
+/* 自定义滚动条样式 */
+.eisenhower-list::-webkit-scrollbar {
+  width: 8px;
+}
+
+.eisenhower-list::-webkit-scrollbar-track {
+  background: color-mix(in oklab, var(--background-modifier-border) 20%, transparent);
+  border-radius: 4px;
+  margin: 4px 0;
+}
+
+.eisenhower-list::-webkit-scrollbar-thumb {
+  background: var(--background-modifier-border);
+  border-radius: 4px;
+  transition: background-color 0.2s ease;
+}
+
+.eisenhower-list::-webkit-scrollbar-thumb:hover {
+  background: var(--background-modifier-hover);
+}
+
+.eisenhower-list::-webkit-scrollbar-thumb:active {
+  background: var(--text-muted);
+}
+
+/* 滚动条容器悬浮时显示 */
+.eisenhower-panel:hover .eisenhower-list::-webkit-scrollbar-thumb {
+  background: color-mix(in oklab, var(--background-modifier-border) 80%, var(--text-muted));
+}
