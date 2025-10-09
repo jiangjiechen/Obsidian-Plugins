@@ -19,6 +19,7 @@ interface EisenhowerSettings {
   urgentTag: string;
   importantKey: string;
   urgentKey: string;
+  startKey: string;
   dueKey: string;
   createdKey: string;
   dateFormat: string;
@@ -31,6 +32,7 @@ const DEFAULT_SETTINGS: EisenhowerSettings = {
   urgentTag: "#urgent",
   importantKey: "important",
   urgentKey: "urgent",
+  startKey: "start",
   dueKey: "due",
   createdKey: "created",
   dateFormat: "YYYY-MM-DD",
@@ -46,6 +48,7 @@ interface TaskItem {
   line: number;
   important: boolean;
   urgent: boolean;
+  start?: Date;
   due?: Date;
   created?: Date;
   collaborators?: string[];
@@ -120,6 +123,11 @@ export default class EisenhowerTodosPlugin extends Plugin {
         const important = (typeof impKV === "boolean") ? impKV : raw.includes(importantTag);
         const urgent = (typeof urgKV === "boolean") ? urgKV : raw.includes(urgentTag);
 
+        const start = extractDate(raw, this.settings.startKey, {
+          fallbackKeys: this.settings.startKey.trim().toLowerCase() === "start" ? [] : ["start"],
+          icons: ["🛫"]
+        });
+
         const due = extractDate(raw, this.settings.dueKey, {
           fallbackKeys: this.settings.dueKey.trim().toLowerCase() === "due" ? [] : ["due"],
           icons: ["📅"]
@@ -139,6 +147,7 @@ export default class EisenhowerTodosPlugin extends Plugin {
         const text = cleanupTaskText(raw, {
           dueKey: this.settings.dueKey,
           createdKey: this.settings.createdKey,
+          startKey: this.settings.startKey,
           importantKey: this.settings.importantKey,
           urgentKey: this.settings.urgentKey,
           importantTag,
@@ -151,6 +160,7 @@ export default class EisenhowerTodosPlugin extends Plugin {
           line: i,
           important,
           urgent,
+          start: start ?? undefined,
           due: due ?? undefined,
           created: created ?? undefined,
           collaborators: collaborators.length > 0 ? collaborators : undefined,
@@ -243,7 +253,9 @@ class EisenhowerView extends ItemView {
       nInU: this.createPanel(wrap, "不重要 · 不紧急", "q-nInU")
     };
 
-    const tasks = await this.plugin.collectTasks();
+    const today = moment().startOf("day");
+    let tasks = await this.plugin.collectTasks();
+    tasks = tasks.filter((t) => !t.start || moment(t.start).isSameOrBefore(today, "day"));
 
     // 排序：due → created
     tasks.sort((a, b) => {
@@ -306,6 +318,7 @@ class EisenhowerView extends ItemView {
     const tooltipParts: string[] = [];
     tooltipParts.push(t.file ? `文件: ${t.file.basename}` : "");
     if (t.created) tooltipParts.push(`创建: ${moment(t.created).format(this.plugin.settings.dateFormat)}`);
+    if (t.start)   tooltipParts.push(`开始: ${moment(t.start).format(this.plugin.settings.dateFormat)}`);
     if (t.due)     tooltipParts.push(`截止: ${moment(t.due).format(this.plugin.settings.dateFormat)}`);
     tooltipParts.push(`重要: ${t.important ? "是" : "否"}`, `紧急: ${t.urgent ? "是" : "否"}`);
 
@@ -346,6 +359,11 @@ class EisenhowerView extends ItemView {
     // 底部：时间chips + 合作者
     const bottom = card.createDiv({ cls: "card-bottom" });
     const chips = bottom.createDiv({ cls: "time-chips" });
+
+    if (t.start) {
+      const startChip = chips.createSpan({ cls: "chip chip-neutral" });
+      startChip.setText(`开始 ${moment(t.start).format("MM-DD")}`);
+    }
 
     if (t.due) {
       const daysLeft = Math.ceil((t.due.getTime() - Date.now()) / (24 * 3600 * 1000));
@@ -415,6 +433,9 @@ class EisenhowerSettingTab extends PluginSettingTab {
 
     new Setting(containerEl).setName("截止日期键名").setDesc("如 due:YYYY-MM-DD")
       .addText((t)=>t.setValue(this.plugin.settings.dueKey).onChange(async (v)=>{ this.plugin.settings.dueKey=v.trim(); await this.plugin.saveSettings(); }));
+
+    new Setting(containerEl).setName("开始日期键名").setDesc("如 start:YYYY-MM-DD")
+      .addText((t)=>t.setValue(this.plugin.settings.startKey).onChange(async (v)=>{ this.plugin.settings.startKey=v.trim(); await this.plugin.saveSettings(); }));
 
     new Setting(containerEl).setName("创建日期键名").setDesc("如 created:YYYY-MM-DD")
       .addText((t)=>t.setValue(this.plugin.settings.createdKey).onChange(async (v)=>{ this.plugin.settings.createdKey=v.trim(); await this.plugin.saveSettings(); }));
@@ -487,7 +508,9 @@ function extractDate(raw: string, key: string, options: ExtractDateOptions = {})
     .filter((icon) => icon.length > 0)));
 
   for (const icon of iconTokens) {
-    const iconRe = new RegExp(`${escapeReg(icon)}\\s*(?:\\[\\[\\s*)?(${DATE_TIME_REGEX_FRAGMENT})(?:\\s*\\]\\])?`, "i");
+    const baseIcon = icon.endsWith("\uFE0F") ? icon.slice(0, -1) : icon;
+    const iconPattern = `${escapeReg(baseIcon)}\\uFE0F?`;
+    const iconRe = new RegExp(`${iconPattern}\\s*(?:\\[\\[\\s*)?(${DATE_TIME_REGEX_FRAGMENT})(?:\\s*\\]\\])?`, "i");
     const iconMatch = iconRe.exec(raw);
     if (iconMatch) {
       const parsed = parseDateString(iconMatch[1]);
@@ -532,12 +555,14 @@ function extractTags(raw: string, importantTag: string, urgentTag: string): stri
   return tags;
 }
 
-function cleanupTaskText(raw: string, keys: { dueKey: string; createdKey: string; importantKey: string; urgentKey: string; importantTag: string; urgentTag: string; }) {
+function cleanupTaskText(raw: string, keys: { dueKey: string; startKey: string; createdKey: string; importantKey: string; urgentKey: string; importantTag: string; urgentTag: string; }) {
   let cleaned = raw;
 
   const datePatterns = [
     new RegExp(`\\b${escapeReg(keys.dueKey)}:\\s*(?:\\[\\[\\s*)?${DATE_TIME_REGEX_FRAGMENT}(?:\\s*\\]\\])?`, "ig"),
     new RegExp(`\\b${escapeReg(keys.dueKey)}::\\s*(?:\\[\\[\\s*)?${DATE_TIME_REGEX_FRAGMENT}(?:\\s*\\]\\])?`, "ig"),
+    new RegExp(`\\b${escapeReg(keys.startKey)}:\\s*(?:\\[\\[\\s*)?${DATE_TIME_REGEX_FRAGMENT}(?:\\s*\\]\\])?`, "ig"),
+    new RegExp(`\\b${escapeReg(keys.startKey)}::\\s*(?:\\[\\[\\s*)?${DATE_TIME_REGEX_FRAGMENT}(?:\\s*\\]\\])?`, "ig"),
     new RegExp(`\\b${escapeReg(keys.createdKey)}:\\s*(?:\\[\\[\\s*)?${DATE_TIME_REGEX_FRAGMENT}(?:\\s*\\]\\])?`, "ig"),
     new RegExp(`\\b${escapeReg(keys.createdKey)}::\\s*(?:\\[\\[\\s*)?${DATE_TIME_REGEX_FRAGMENT}(?:\\s*\\]\\])?`, "ig")
   ];
@@ -553,7 +578,9 @@ function cleanupTaskText(raw: string, keys: { dueKey: string; createdKey: string
 
   const metadataIcons = ["📅", "🛫", "⏳", "✅", "📋", "🕗"];
   for (const icon of metadataIcons) {
-    const iconRe = new RegExp(`${escapeReg(icon)}\\s*(?:\\[\\[\\s*)?${DATE_TIME_REGEX_FRAGMENT}(?:\\s*\\]\\])?`, "ig");
+    const baseIcon = icon.endsWith("\uFE0F") ? icon.slice(0, -1) : icon;
+    const iconPattern = `${escapeReg(baseIcon)}\\uFE0F?`;
+    const iconRe = new RegExp(`${iconPattern}\\s*(?:\\[\\[\\s*)?${DATE_TIME_REGEX_FRAGMENT}(?:\\s*\\]\\])?`, "ig");
     cleaned = cleaned.replace(iconRe, "");
   }
 
