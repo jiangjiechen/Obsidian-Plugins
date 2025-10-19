@@ -153,6 +153,7 @@ export default class EisenhowerTodosPlugin extends Plugin {
           importantTag,
           urgentTag
         });
+        if (!text) continue;
 
         tasks.push({
           text,
