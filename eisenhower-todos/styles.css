@@ -96,6 +96,14 @@
   width: 100%;
   box-sizing: border-box;
 }
+.eisenhower-card.card-due-today {
+  --card-bg: color-mix(in oklab, #fef3c7 65%, var(--background-primary));
+  border-color: color-mix(in oklab, #f59e0b 55%, var(--card-border));
+}
+.eisenhower-card.card-overdue {
+  --card-bg: color-mix(in oklab, #fee2e2 65%, var(--background-primary));
+  border-color: color-mix(in oklab, #ef4444 55%, var(--card-border));
+}
 .eisenhower-card:hover {
   transform: translateY(-1px);
   box-shadow: 0 4px 12px rgba(0,0,0,.08);

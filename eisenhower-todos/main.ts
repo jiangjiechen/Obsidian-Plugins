@@ -367,24 +367,24 @@ class EisenhowerView extends ItemView {
     }
 
     if (t.due) {
-      const daysLeft = Math.ceil((t.due.getTime() - Date.now()) / (24 * 3600 * 1000));
+      const today = moment().startOf("day");
+      const dueMoment = moment(t.due);
+      const dayDiff = dueMoment.clone().startOf("day").diff(today, "days");
 
-      if (daysLeft < 0) {
-        // 逾期：显示逾期天数，红色警告
+      if (dayDiff < 0) {
+        card.addClass("card-overdue");
         const overdueChip = chips.createSpan({ cls: "chip chip-danger" });
-        overdueChip.setText(`逾期${Math.abs(daysLeft)}天`);
-      } else if (daysLeft === 0) {
-        // 今天到期
+        overdueChip.setText(`逾期${Math.abs(dayDiff)}天`);
+      } else if (dayDiff === 0) {
+        card.addClass("card-due-today");
         const todayChip = chips.createSpan({ cls: "chip chip-warning" });
         todayChip.setText("今天到期");
-      } else if (daysLeft <= 3) {
-        // 即将到期
+      } else if (dayDiff <= 3) {
         const soonChip = chips.createSpan({ cls: "chip chip-warning" });
-        soonChip.setText(`${daysLeft}天后到期`);
+        soonChip.setText(`${dayDiff}天后到期`);
       } else {
-        // 正常期限
         const normalChip = chips.createSpan({ cls: "chip chip-neutral" });
-        normalChip.setText(moment(t.due).format("MM-DD"));
+        normalChip.setText(dueMoment.format("MM-DD"));
       }
     }
 
