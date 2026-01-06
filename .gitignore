@@ -2,7 +2,7 @@
 node_modules/
 
 # Build artifacts
-main.js
+# main.js  # Keep for Obsidian plugin releases
 main.js.map
 dist/
 build/
