@@ -12,6 +12,8 @@ import { DailyNoteParser } from './dailyNoteParser';
 import { StatsManager } from './statsManager';
 import { FocusPlannerView, VIEW_TYPE_FOCUS_PLANNER, NewEventData } from './calendarView';
 import { FocusPlannerSettingTab } from './settingsTab';
+import { TaskParser, TaskPanelData, ParsedTask } from './taskParser';
+import { FloatingTimerWindow } from './floatingTimer';
 
 export default class FocusPlannerPlugin extends Plugin {
   settings: FocusPlannerSettings;
@@ -19,8 +21,14 @@ export default class FocusPlannerPlugin extends Plugin {
   caldavClient: CalDavClient;
   dailyNoteParser: DailyNoteParser;
   statsManager: StatsManager;
+  taskParser: TaskParser;
+  floatingTimer: FloatingTimerWindow;
 
   private syncIntervalId: number | null = null;
+  private timerUpdateIntervalId: number | null = null;
+  private timerUnsubscribe: (() => void) | null = null;
+  private currentPomodoroEvent: CalendarEvent | null = null;
+  private pomodoroCompletionHandled: boolean = false;
 
   async onload() {
     await this.loadSettings();
@@ -28,6 +36,8 @@ export default class FocusPlannerPlugin extends Plugin {
     // Initialize components
     this.dailyNoteParser = new DailyNoteParser(this.app, this.settings);
     this.statsManager = new StatsManager(this.app, this.settings, this.dailyNoteParser);
+    this.taskParser = new TaskParser(this.app);
+    this.floatingTimer = new FloatingTimerWindow();
     this.feishuApi = new FeishuApi(
       this.settings.feishu,
       async (feishuSettings) => {
@@ -53,6 +63,8 @@ export default class FocusPlannerPlugin extends Plugin {
         view.onEventCreate = (data) => this.handleEventCreate(data);
         view.onEventDelete = (event) => this.handleEventDelete(event);
         view.onWeekChange = (weekStart) => this.getEventsForWeek(weekStart);
+        view.onGetTasks = (weekStart) => this.taskParser.getTasksForPanel(weekStart);
+        view.onTaskInferCategory = (task) => this.taskParser.inferCategory(task);
         return view;
       }
     );
@@ -93,6 +105,12 @@ export default class FocusPlannerPlugin extends Plugin {
 
   onunload() {
     this.stopAutoSync();
+    this.stopTimerUpdate();
+    this.floatingTimer?.hide();
+    if (this.timerUnsubscribe) {
+      this.timerUnsubscribe();
+      this.timerUnsubscribe = null;
+    }
   }
 
   async loadSettings() {
@@ -338,19 +356,75 @@ export default class FocusPlannerPlugin extends Plugin {
   }
 
   // Start pomodoro timer for an event
-  private startPomodoroForEvent(event: CalendarEvent) {
+  private async startPomodoroForEvent(event: CalendarEvent) {
     // Try to execute the pomodoro-timer plugin's toggle command
     // @ts-ignore - accessing internal API
     const pomodoroPlugin = this.app.plugins?.plugins?.['pomodoro-timer'];
 
     if (pomodoroPlugin) {
+      // Store the current event for when pomodoro completes
+      this.currentPomodoroEvent = event;
+      this.pomodoroCompletionHandled = false;
+
       // Execute the toggle-timer command
       // @ts-ignore
       this.app.commands.executeCommandById('pomodoro-timer:toggle-timer');
+
+      // Show floating timer window
+      this.floatingTimer.show(event.title, () => {
+        // Called when timer completes (optional callback)
+        new Notice(`🍅 番茄钟完成: ${event.title}`);
+      });
+
+      // Start updating the floating timer display
+      this.startTimerUpdate();
+
       new Notice(`🍅 开始番茄钟: ${event.title}`);
     } else {
       new Notice('请先安装并启用 Pomodoro Timer 插件');
     }
+  }
+
+  // Handle pomodoro completion - update task and refresh view
+  private async handlePomodoroComplete() {
+    const event = this.currentPomodoroEvent;
+    if (!event) return;
+
+    // Try to update the linked task's [done:: N] field
+    let taskUpdated = false;
+    let newDone = 0;
+    let totalPomos = 0;
+
+    // First, try using the saved task link (from drag-and-drop)
+    if (event.taskSourcePath && event.taskLineNumber) {
+      const task = await this.taskParser.findTaskByLocation(event.taskSourcePath, event.taskLineNumber);
+      if (task) {
+        taskUpdated = await this.taskParser.incrementTaskDone(task);
+        newDone = task.pomodorosDone + 1;
+        totalPomos = task.pomodoros;
+      }
+    }
+
+    // Fallback: try to find by title match
+    if (!taskUpdated) {
+      const task = await this.taskParser.findTaskByTitle(event.title);
+      if (task) {
+        taskUpdated = await this.taskParser.incrementTaskDone(task);
+        newDone = task.pomodorosDone + 1;
+        totalPomos = task.pomodoros;
+      }
+    }
+
+    if (taskUpdated) {
+      const total = totalPomos > 0 ? `/${totalPomos}` : '';
+      new Notice(`✅ 番茄钟完成!\n📝 ${event.title}: ${newDone}${total}🍅`);
+    }
+
+    // Refresh the calendar view to show updated pomodoro counts
+    await this.refreshView();
+
+    // Clear current event
+    this.currentPomodoroEvent = null;
   }
 
   // Handle event deletion (context menu)
@@ -369,7 +443,7 @@ export default class FocusPlannerPlugin extends Plugin {
     await this.refreshView();
   }
 
-  // Handle event creation (double-click on calendar)
+  // Handle event creation (double-click on calendar or drag from task panel)
   private async handleEventCreate(data: NewEventData): Promise<void> {
     const date = new Date(data.start);
     date.setHours(0, 0, 0, 0);
@@ -382,6 +456,9 @@ export default class FocusPlannerPlugin extends Plugin {
       end: data.end,
       category: data.category,
       source: 'local',
+      // Save task link for pomodoro tracking
+      taskSourcePath: data.taskSourcePath,
+      taskLineNumber: data.taskLineNumber,
     };
 
     // Add to daily note
@@ -448,6 +525,117 @@ export default class FocusPlannerPlugin extends Plugin {
     if (this.syncIntervalId !== null) {
       window.clearInterval(this.syncIntervalId);
       this.syncIntervalId = null;
+    }
+  }
+
+  // Start subscribing to pomodoro timer state
+  private startTimerUpdate() {
+    this.stopTimerUpdate();
+
+    // @ts-ignore - accessing internal API
+    const pomodoroPlugin = this.app.plugins?.plugins?.['pomodoro-timer'];
+
+    if (!pomodoroPlugin) {
+      console.log('[Focus Planner] Pomodoro plugin not found');
+      return;
+    }
+
+    // The pomodoro-timer plugin uses a Svelte store for timer state
+    // Try to subscribe to the timer store
+    // @ts-ignore
+    const timerStore = pomodoroPlugin.timer;
+
+    if (timerStore && typeof timerStore.subscribe === 'function') {
+      console.log('[Focus Planner] Subscribing to pomodoro timer store');
+
+      // Subscribe to timer state changes
+      this.timerUnsubscribe = timerStore.subscribe((state: any) => {
+        if (!state) return;
+
+        // State has: running, remained { millis, human }, mode, count, elapsed, finished
+        const running = state.running || false;
+        const remained = state.remained || { millis: 0 };
+        const mode = state.mode || 'work';
+
+        // Calculate minutes and seconds from millis
+        const totalSeconds = Math.ceil(remained.millis / 1000);
+        const minutes = Math.floor(totalSeconds / 60);
+        const seconds = totalSeconds % 60;
+
+        // Update the floating timer display
+        this.floatingTimer.updateDisplay(minutes, seconds, running, mode);
+
+        // If timer finished (work mode completed), handle completion
+        if (state.finished && !running && mode === 'work' && !this.pomodoroCompletionHandled) {
+          this.pomodoroCompletionHandled = true;
+          // Handle pomodoro completion (update task, refresh view)
+          this.handlePomodoroComplete();
+
+          // Hide window after a delay
+          setTimeout(() => {
+            if (this.floatingTimer.isVisible()) {
+              this.floatingTimer.hide();
+              this.stopTimerUpdate();
+            }
+          }, 3000);
+        }
+      });
+    } else {
+      // Fallback: use polling if subscribe is not available
+      console.log('[Focus Planner] Timer store not found, using polling fallback');
+      this.timerUpdateIntervalId = window.setInterval(() => {
+        this.updateFloatingTimerPolling();
+      }, 500);
+    }
+  }
+
+  // Stop timer update interval and unsubscribe
+  private stopTimerUpdate() {
+    if (this.timerUnsubscribe) {
+      this.timerUnsubscribe();
+      this.timerUnsubscribe = null;
+    }
+    if (this.timerUpdateIntervalId !== null) {
+      window.clearInterval(this.timerUpdateIntervalId);
+      this.timerUpdateIntervalId = null;
+    }
+  }
+
+  // Fallback: polling update for floating timer
+  private updateFloatingTimerPolling() {
+    // @ts-ignore - accessing internal API
+    const pomodoroPlugin = this.app.plugins?.plugins?.['pomodoro-timer'];
+
+    if (!pomodoroPlugin) {
+      this.stopTimerUpdate();
+      this.floatingTimer.hide();
+      return;
+    }
+
+    // Try to get current state via get() if available
+    // @ts-ignore
+    const timerStore = pomodoroPlugin.timer;
+
+    if (timerStore) {
+      // Try to get current value - Svelte stores have a get() or we can read from DOM
+      let state: any = null;
+
+      // Some Svelte stores allow direct access to the current value
+      if (typeof timerStore.get === 'function') {
+        state = timerStore.get();
+      }
+
+      if (state) {
+        const running = state.running || false;
+        const remained = state.remained || { millis: 0 };
+        const mode = state.mode || 'work';
+
+        const totalSeconds = Math.ceil(remained.millis / 1000);
+        const minutes = Math.floor(totalSeconds / 60);
+        const seconds = totalSeconds % 60;
+
+        this.floatingTimer.updateDisplay(minutes, seconds, running, mode);
+      }
     }
   }
 }

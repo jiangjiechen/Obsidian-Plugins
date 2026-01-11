@@ -27,7 +27,7 @@ __export(main_exports, {
   default: () => FocusPlannerPlugin
 });
 module.exports = __toCommonJS(main_exports);
-var import_obsidian6 = require("obsidian");
+var import_obsidian7 = require("obsidian");
 
 // src/types.ts
 var EventCategory = /* @__PURE__ */ ((EventCategory3) => {
@@ -1123,13 +1123,13 @@ var DailyNoteParser = class {
   }
   // Parse events from a daily note
   async parseEventsFromDailyNote(date) {
-    const path = this.getDailyNotePath(date);
-    const file = this.app.vault.getAbstractFileByPath(path);
+    const path2 = this.getDailyNotePath(date);
+    const file = this.app.vault.getAbstractFileByPath(path2);
     if (!(file instanceof import_obsidian3.TFile)) {
       return [];
     }
     const content = await this.app.vault.read(file);
-    return this.parseEventsFromContent(content, date, path);
+    return this.parseEventsFromContent(content, date, path2);
   }
   // Parse events from markdown content
   parseEventsFromContent(content, date, filePath) {
@@ -1216,8 +1216,8 @@ var DailyNoteParser = class {
   }
   // Parse pomodoro records from daily note
   async parsePomodorosFromDailyNote(date) {
-    const path = this.getDailyNotePath(date);
-    const file = this.app.vault.getAbstractFileByPath(path);
+    const path2 = this.getDailyNotePath(date);
+    const file = this.app.vault.getAbstractFileByPath(path2);
     if (!(file instanceof import_obsidian3.TFile)) {
       return [];
     }
@@ -1247,21 +1247,21 @@ var DailyNoteParser = class {
   // Write events to daily note's Day Planner section
   // Returns: { success: boolean, skipped: boolean, reason?: string }
   async writeEventsToDailyNote(date, events) {
-    const path = this.getDailyNotePath(date);
-    let file = this.app.vault.getAbstractFileByPath(path);
+    const path2 = this.getDailyNotePath(date);
+    let file = this.app.vault.getAbstractFileByPath(path2);
     if (!file) {
       await this.createDailyNote(date);
-      file = this.app.vault.getAbstractFileByPath(path);
+      file = this.app.vault.getAbstractFileByPath(path2);
       if (!file) {
-        console.log(`[Focus Planner] Failed to create daily note: ${path}`);
-        return { success: false, skipped: true, reason: `\u65E0\u6CD5\u521B\u5EFA\u65E5\u8BB0: ${path}` };
+        console.log(`[Focus Planner] Failed to create daily note: ${path2}`);
+        return { success: false, skipped: true, reason: `\u65E0\u6CD5\u521B\u5EFA\u65E5\u8BB0: ${path2}` };
       }
-      console.log(`[Focus Planner] Created daily note: ${path}`);
+      console.log(`[Focus Planner] Created daily note: ${path2}`);
     }
     let content = await this.app.vault.read(file);
     if (!content.includes("## Day Planner")) {
       content = this.addDayPlannerSection(content);
-      console.log(`[Focus Planner] Added Day Planner section to: ${path}`);
+      console.log(`[Focus Planner] Added Day Planner section to: ${path2}`);
     }
     const deduped = this.deduplicateEvents(events);
     const updatedContent = this.updateDayPlannerSection(content, deduped);
@@ -1282,14 +1282,14 @@ var DailyNoteParser = class {
   }
   // Create a new daily note with LifeOS template
   async createDailyNote(date) {
-    const path = this.getDailyNotePath(date);
-    const dir = path.substring(0, path.lastIndexOf("/"));
+    const path2 = this.getDailyNotePath(date);
+    const dir = path2.substring(0, path2.lastIndexOf("/"));
     const existingDir = this.app.vault.getAbstractFileByPath(dir);
     if (!existingDir) {
       await this.app.vault.createFolder(dir);
     }
     const template = this.getLifeOSDailyTemplate(date);
-    await this.app.vault.create(path, template);
+    await this.app.vault.create(path2, template);
   }
   // Get LifeOS-style daily note template
   getLifeOSDailyTemplate(date) {
@@ -1489,10 +1489,10 @@ ${newContent}
   }
   // Remove an event from a daily note
   async removeEventFromDailyNote(date, event) {
-    const path = this.getDailyNotePath(date);
-    const file = this.app.vault.getAbstractFileByPath(path);
+    const path2 = this.getDailyNotePath(date);
+    const file = this.app.vault.getAbstractFileByPath(path2);
     if (!(file instanceof import_obsidian3.TFile)) {
-      throw new Error(`File not found: ${path}`);
+      throw new Error(`File not found: ${path2}`);
     }
     const content = await this.app.vault.read(file);
     const startTime = this.formatTime(event.start);
@@ -1514,10 +1514,10 @@ ${newContent}
   }
   // Add an event to a daily note
   async addEventToDailyNote(date, event) {
-    const path = this.getDailyNotePath(date);
-    const file = this.app.vault.getAbstractFileByPath(path);
+    const path2 = this.getDailyNotePath(date);
+    const file = this.app.vault.getAbstractFileByPath(path2);
     if (!file) {
-      throw new Error(`\u65E5\u8BB0\u4E0D\u5B58\u5728: ${path}
+      throw new Error(`\u65E5\u8BB0\u4E0D\u5B58\u5728: ${path2}
 \u8BF7\u5148\u901A\u8FC7 Templater \u521B\u5EFA\u65E5\u8BB0`);
     }
     const content = await this.app.vault.read(file);
@@ -1735,7 +1735,7 @@ var StatsManager = class {
 var import_obsidian4 = require("obsidian");
 var VIEW_TYPE_FOCUS_PLANNER = "focus-planner-view";
 var START_HOUR = 7;
-var END_HOUR = 22;
+var END_HOUR = 23;
 var HOUR_HEIGHT = 60;
 var TOTAL_HOURS = END_HOUR - START_HOUR;
 var SNAP_MINUTES = 15;
@@ -1860,6 +1860,9 @@ var FocusPlannerView = class extends import_obsidian4.ItemView {
     this.summaryContainer = null;
     this.dragState = null;
     this.dayColumnsContainer = null;
+    // Task panel
+    this.taskPanel = null;
+    this.taskPanelData = null;
     // Callbacks
     this.onSyncFeishu = null;
     this.onEventClick = null;
@@ -1869,6 +1872,9 @@ var FocusPlannerView = class extends import_obsidian4.ItemView {
     this.onEventDelete = null;
     this.getWeeklyStats = null;
     this.onWeekChange = null;
+    // Task panel callbacks
+    this.onGetTasks = null;
+    this.onTaskInferCategory = null;
     this.handleDragMove = (e) => {
       if (!this.dragState)
         return;
@@ -1977,10 +1983,14 @@ var FocusPlannerView = class extends import_obsidian4.ItemView {
     container.addClass("focus-planner-container");
     const header = container.createDiv({ cls: "focus-planner-header" });
     this.createHeader(header);
-    this.calendarContainer = container.createDiv({ cls: "focus-planner-calendar" });
+    const mainContent = container.createDiv({ cls: "focus-planner-main" });
+    this.calendarContainer = mainContent.createDiv({ cls: "focus-planner-calendar" });
+    this.taskPanel = mainContent.createDiv({ cls: "focus-planner-task-panel" });
     this.summaryContainer = container.createDiv({ cls: "focus-planner-summary" });
     await this.loadEventsForCurrentWeek();
+    await this.loadTasksForPanel();
     this.renderCalendar();
+    this.renderTaskPanel();
     this.updateSummaryBar();
   }
   createHeader(container) {
@@ -2114,9 +2124,10 @@ var FocusPlannerView = class extends import_obsidian4.ItemView {
     }
     const body = grid.createDiv({ cls: "time-grid-body" });
     const timeColumn = body.createDiv({ cls: "time-column" });
+    timeColumn.style.height = `${TOTAL_HOURS * HOUR_HEIGHT}px`;
     for (let hour = START_HOUR; hour <= END_HOUR; hour++) {
       const slot = timeColumn.createDiv({ cls: "time-slot" });
-      slot.style.height = `${HOUR_HEIGHT}px`;
+      slot.style.height = hour < END_HOUR ? `${HOUR_HEIGHT}px` : "0px";
       slot.createSpan({ text: `${String(hour).padStart(2, "0")}:00` });
     }
     const columnsContainer = body.createDiv({ cls: "day-columns-container" });
@@ -2157,6 +2168,7 @@ var FocusPlannerView = class extends import_obsidian4.ItemView {
       });
     }
     this.addCurrentTimeIndicator(columnsContainer);
+    this.setupDropZones();
   }
   // Handle double-click on day column to create new event
   handleDayColumnDoubleClick(e, date, dayColumn) {
@@ -2417,6 +2429,18 @@ var FocusPlannerView = class extends import_obsidian4.ItemView {
   showEventMenu(e, event) {
     const menu = new import_obsidian4.Menu();
     menu.addItem((item) => {
+      item.setTitle(`\u{1F4CC} ${event.title}`).setDisabled(true);
+    });
+    menu.addItem((item) => {
+      item.setTitle(`\u23F1\uFE0F ${this.formatTime(event.start)} - ${this.formatTime(event.end)}`).setDisabled(true);
+    });
+    if (event.plannedPomodoros) {
+      menu.addItem((item) => {
+        item.setTitle(`\u{1F3AF} \u8BA1\u5212 ${event.plannedPomodoros} \u4E2A\u756A\u8304\u949F`).setDisabled(true);
+      });
+    }
+    menu.addSeparator();
+    menu.addItem((item) => {
       item.setTitle("\u{1F345} \u5F00\u59CB\u756A\u8304\u949F").setIcon("timer").onClick(() => {
         if (this.onStartPomodoro) {
           this.onStartPomodoro(event);
@@ -2432,8 +2456,8 @@ var FocusPlannerView = class extends import_obsidian4.ItemView {
         });
       });
     }
-    menu.addSeparator();
     if (event.source === "local") {
+      menu.addSeparator();
       menu.addItem((item) => {
         item.setTitle("\u{1F5D1}\uFE0F \u5220\u9664\u65E5\u7A0B").setIcon("trash").onClick(async () => {
           if (this.onEventDelete) {
@@ -2445,15 +2469,6 @@ var FocusPlannerView = class extends import_obsidian4.ItemView {
             }
           }
         });
-      });
-      menu.addSeparator();
-    }
-    menu.addItem((item) => {
-      item.setTitle(`\u23F1\uFE0F ${this.formatTime(event.start)} - ${this.formatTime(event.end)}`).setDisabled(true);
-    });
-    if (event.plannedPomodoros) {
-      menu.addItem((item) => {
-        item.setTitle(`\u{1F3AF} \u8BA1\u5212 ${event.plannedPomodoros} \u4E2A\u756A\u8304\u949F`).setDisabled(true);
       });
     }
     menu.showAtMouseEvent(e);
@@ -2476,15 +2491,13 @@ var FocusPlannerView = class extends import_obsidian4.ItemView {
     if (currentHour < START_HOUR || currentHour >= END_HOUR)
       return;
     const top = (currentHour - START_HOUR + currentMinute / 60) * HOUR_HEIGHT;
-    const indicator = container.createDiv({ cls: "current-time-indicator" });
-    indicator.style.top = `${top}px`;
     const dayColumns = container.querySelectorAll(".day-column");
     if (dayColumns[dayIndex]) {
       const dayColumn = dayColumns[dayIndex];
-      const rect = dayColumn.getBoundingClientRect();
-      const containerRect = container.getBoundingClientRect();
-      indicator.style.left = `${rect.left - containerRect.left}px`;
-      indicator.style.width = `${rect.width}px`;
+      const indicator = dayColumn.createDiv({ cls: "current-time-indicator" });
+      indicator.style.top = `${top}px`;
+      indicator.style.left = "0";
+      indicator.style.right = "0";
     }
   }
   darkenColor(color, percent) {
@@ -2554,6 +2567,198 @@ var FocusPlannerView = class extends import_obsidian4.ItemView {
     }
   }
   async onClose() {
+  }
+  // ========== TASK PANEL ==========
+  // Load tasks for the panel
+  async loadTasksForPanel() {
+    if (this.onGetTasks) {
+      this.taskPanelData = await this.onGetTasks(this.currentWeekStart);
+    }
+  }
+  // Render the task panel
+  renderTaskPanel() {
+    if (!this.taskPanel)
+      return;
+    this.taskPanel.empty();
+    const header = this.taskPanel.createDiv({ cls: "task-panel-header" });
+    header.createSpan({ text: "\u{1F4CB} \u5F85\u529E\u4EFB\u52A1" });
+    const refreshBtn = header.createEl("button", { cls: "task-panel-refresh", text: "\u21BB" });
+    refreshBtn.addEventListener("click", async () => {
+      await this.loadTasksForPanel();
+      this.renderTaskPanel();
+    });
+    const content = this.taskPanel.createDiv({ cls: "task-panel-content" });
+    if (!this.taskPanelData) {
+      content.createDiv({ cls: "task-panel-empty", text: "\u52A0\u8F7D\u4E2D..." });
+      const hint2 = this.taskPanel.createDiv({ cls: "task-panel-hint" });
+      hint2.textContent = "\u{1F4A1} \u62D6\u62FD\u4EFB\u52A1\u5230\u65E5\u5386\u521B\u5EFA\u65E5\u7A0B";
+      return;
+    }
+    const { today, thisWeek, overdue } = this.taskPanelData;
+    if (overdue.length > 0) {
+      this.renderTaskSection(content, "\u{1F534} \u5DF2\u8FC7\u671F", overdue, "overdue");
+    }
+    if (today.length > 0) {
+      this.renderTaskSection(content, "\u{1F7E0} \u4ECA\u65E5 Due", today, "today");
+    }
+    if (thisWeek.length > 0) {
+      this.renderTaskSection(content, "\u{1F7E1} \u672C\u5468 Due", thisWeek, "week");
+    }
+    if (overdue.length === 0 && today.length === 0 && thisWeek.length === 0) {
+      const emptyDiv = content.createDiv({ cls: "task-panel-empty" });
+      emptyDiv.createSpan({ text: "\u6682\u65E0\u5F85\u529E\u4EFB\u52A1" });
+      emptyDiv.createEl("br");
+      emptyDiv.createSpan({ text: "\u4EFB\u52A1\u6765\u6E90: PeriodicNotes/, Meetings/" });
+    }
+    const hint = this.taskPanel.createDiv({ cls: "task-panel-hint" });
+    hint.textContent = "\u{1F4A1} \u62D6\u62FD\u4EFB\u52A1\u5230\u65E5\u5386\u521B\u5EFA\u65E5\u7A0B";
+  }
+  // Render a section of tasks
+  renderTaskSection(container, title, tasks, sectionType) {
+    const section = container.createDiv({ cls: `task-panel-section ${sectionType}` });
+    const header = section.createDiv({ cls: "task-panel-section-header" });
+    header.createSpan({ text: title });
+    header.createSpan({ cls: "task-count", text: `(${tasks.length})` });
+    const taskList = section.createDiv({ cls: "task-list" });
+    for (const task of tasks) {
+      const taskCard = this.createTaskCard(task);
+      taskList.appendChild(taskCard);
+    }
+  }
+  // Create a draggable task card
+  createTaskCard(task) {
+    const card = document.createElement("div");
+    card.className = "task-card";
+    card.setAttribute("draggable", "true");
+    card.addClass(`priority-${task.priority}`);
+    const titleEl = card.createDiv({ cls: "task-card-title" });
+    if (task.priority === "highest") {
+      titleEl.createSpan({ cls: "task-priority", text: "\u23EB " });
+    } else if (task.priority === "high") {
+      titleEl.createSpan({ cls: "task-priority", text: "\u{1F53A} " });
+    }
+    titleEl.createSpan({ text: task.title });
+    const metaEl = card.createDiv({ cls: "task-meta" });
+    if (task.pomodoros > 0) {
+      metaEl.createSpan({ cls: "task-pomo", text: `${task.pomodoros}\u{1F345}` });
+    }
+    if (task.dueDate) {
+      const dateStr = `${task.dueDate.getMonth() + 1}/${task.dueDate.getDate()}`;
+      metaEl.createSpan({ cls: "task-due", text: `\u{1F4C5} ${dateStr}` });
+    }
+    if (task.tags.length > 0) {
+      const tagsStr = task.tags.slice(0, 2).map((t) => `#${t}`).join(" ");
+      metaEl.createSpan({ cls: "task-tags", text: tagsStr });
+    }
+    card.addEventListener("click", (e) => {
+      if (e.detail === 1) {
+        this.openTaskSource(task);
+      }
+    });
+    card.addEventListener("dragstart", (e) => {
+      var _a;
+      card.addClass("dragging");
+      (_a = e.dataTransfer) == null ? void 0 : _a.setData("application/json", JSON.stringify(task));
+      e.dataTransfer.effectAllowed = "copy";
+    });
+    card.addEventListener("dragend", () => {
+      card.removeClass("dragging");
+    });
+    return card;
+  }
+  // Set up drop zones on day columns
+  setupDropZones() {
+    if (!this.dayColumnsContainer)
+      return;
+    const dayColumns = this.dayColumnsContainer.querySelectorAll(".day-column");
+    dayColumns.forEach((col, index) => {
+      const column = col;
+      column.addEventListener("dragover", (e) => {
+        e.preventDefault();
+        e.dataTransfer.dropEffect = "copy";
+        column.addClass("drop-target");
+      });
+      column.addEventListener("dragleave", () => {
+        column.removeClass("drop-target");
+      });
+      column.addEventListener("drop", (e) => {
+        var _a;
+        e.preventDefault();
+        column.removeClass("drop-target");
+        const taskData = (_a = e.dataTransfer) == null ? void 0 : _a.getData("application/json");
+        if (taskData) {
+          try {
+            const task = JSON.parse(taskData);
+            const date = new Date(this.currentWeekStart);
+            date.setDate(date.getDate() + index);
+            this.handleTaskDrop(e, task, date, column);
+          } catch (err) {
+            console.error("Failed to parse dropped task:", err);
+          }
+        }
+      });
+    });
+  }
+  // Handle dropping a task onto the calendar
+  handleTaskDrop(e, task, date, dayColumn) {
+    const rect = dayColumn.getBoundingClientRect();
+    const relativeY = e.clientY - rect.top;
+    const totalMinutes = relativeY / HOUR_HEIGHT * 60 + START_HOUR * 60;
+    const snappedMinutes = Math.round(totalMinutes / SNAP_MINUTES) * SNAP_MINUTES;
+    const hour = Math.floor(snappedMinutes / 60);
+    const minute = snappedMinutes % 60;
+    const clampedHour = Math.max(START_HOUR, Math.min(END_HOUR - 1, hour));
+    const clampedMinute = minute >= 60 ? 0 : minute;
+    const durationMinutes = task.pomodoros > 0 ? task.pomodoros * 25 : 60;
+    const startDate = new Date(date);
+    startDate.setHours(clampedHour, clampedMinute, 0, 0);
+    const endDate = new Date(startDate.getTime() + durationMinutes * 60 * 1e3);
+    if (endDate.getHours() > END_HOUR || endDate.getHours() === END_HOUR && endDate.getMinutes() > 0) {
+      endDate.setHours(END_HOUR, 0, 0, 0);
+    }
+    let category = "focus" /* FOCUS */;
+    if (this.onTaskInferCategory) {
+      category = this.onTaskInferCategory(task);
+    }
+    const eventData = {
+      title: task.title,
+      category,
+      start: startDate,
+      end: endDate,
+      taskSourcePath: task.sourcePath,
+      taskLineNumber: task.lineNumber
+    };
+    if (this.onEventCreate) {
+      this.onEventCreate(eventData).then(() => {
+        new import_obsidian4.Notice(`\u2705 \u5DF2\u521B\u5EFA\u65E5\u7A0B: ${task.title}`);
+      }).catch((error) => {
+        new import_obsidian4.Notice(`\u521B\u5EFA\u5931\u8D25: ${error.message}`);
+      });
+    }
+  }
+  // Refresh task panel (can be called externally)
+  async refreshTaskPanel() {
+    await this.loadTasksForPanel();
+    this.renderTaskPanel();
+  }
+  // Open task source file at specific line
+  openTaskSource(task) {
+    if (!task.sourcePath)
+      return;
+    const file = this.app.vault.getAbstractFileByPath(task.sourcePath);
+    if (file) {
+      this.app.workspace.openLinkText("", task.sourcePath).then(() => {
+        const activeView = this.app.workspace.getActiveViewOfType(import_obsidian4.ItemView);
+        if (activeView) {
+          const editor = activeView.editor;
+          if (editor) {
+            const line = task.lineNumber - 1;
+            editor.setCursor({ line, ch: 0 });
+            editor.scrollIntoView({ from: { line, ch: 0 }, to: { line, ch: 0 } }, true);
+          }
+        }
+      });
+    }
   }
 };
 
@@ -2736,16 +2941,534 @@ var FocusPlannerSettingTab = class extends import_obsidian5.PluginSettingTab {
   }
 };
 
+// src/taskParser.ts
+var import_obsidian6 = require("obsidian");
+var STATUS_MAP = {
+  " ": "todo",
+  "x": "done",
+  "X": "done",
+  "/": "in_progress",
+  "-": "cancelled",
+  ">": "deferred"
+};
+var TaskParser = class {
+  constructor(app, taskSources) {
+    this.app = app;
+    this.taskSources = taskSources || [
+      "PeriodicNotes/",
+      // Daily notes with 今日TODO
+      "Meetings/",
+      // Meeting notes with tasks
+      "Personal/",
+      // Personal tasks
+      "Clippings/"
+      // Clipped content with tasks
+    ];
+  }
+  /**
+   * Parse a single task line
+   */
+  parseTaskLine(line, sourcePath, lineNumber) {
+    var _a;
+    const taskMatch = line.match(/^[\s]*[-*]\s*\[(.)\]\s*(.+)$/);
+    if (!taskMatch)
+      return null;
+    const statusChar = taskMatch[1];
+    const content = taskMatch[2];
+    const status = STATUS_MAP[statusChar] || "todo";
+    if (status === "done" || status === "cancelled")
+      return null;
+    let priority = "normal";
+    if (content.includes("\u23EB"))
+      priority = "highest";
+    else if (content.includes("\u{1F53A}"))
+      priority = "high";
+    else if (content.includes("\u{1F53D}"))
+      priority = "low";
+    let dueDate = null;
+    const dueDateMatches = content.match(/📅\s*(\d{4}-\d{2}-\d{2})/g);
+    if (dueDateMatches && dueDateMatches.length > 0) {
+      const lastMatch = dueDateMatches[dueDateMatches.length - 1];
+      const dateStr = (_a = lastMatch.match(/📅\s*(\d{4}-\d{2}-\d{2})/)) == null ? void 0 : _a[1];
+      if (dateStr) {
+        dueDate = new Date(dateStr);
+        dueDate.setHours(23, 59, 59);
+      }
+    }
+    let scheduledDate = null;
+    const scheduledMatch = content.match(/⏳\s*(\d{4}-\d{2}-\d{2})/);
+    if (scheduledMatch) {
+      scheduledDate = new Date(scheduledMatch[1]);
+    }
+    let pomodoros = 0;
+    const pomoMatch = content.match(/\[pomo::\s*(\d+)\]/);
+    if (pomoMatch) {
+      pomodoros = parseInt(pomoMatch[1], 10);
+    } else {
+      const tomatoMatch = content.match(/(\d+)🍅/);
+      if (tomatoMatch) {
+        pomodoros = parseInt(tomatoMatch[1], 10);
+      }
+    }
+    let pomodorosDone = 0;
+    const doneMatch = content.match(/\[done::\s*(\d+)\]/);
+    if (doneMatch) {
+      pomodorosDone = parseInt(doneMatch[1], 10);
+    }
+    const tags = [];
+    const tagMatches = content.matchAll(/#([^\s#\[\]]+)/g);
+    for (const match of tagMatches) {
+      tags.push(match[1]);
+    }
+    let title = content.replace(/⏫|🔺|🔽/g, "").replace(/📅\s*\d{4}-\d{2}-\d{2}/g, "").replace(/⏳\s*\d{4}-\d{2}-\d{2}/g, "").replace(/✅\s*\d{4}-\d{2}-\d{2}/g, "").replace(/\[pomo::\s*\d+\]/g, "").replace(/\[done::\s*\d+\]/g, "").replace(/\d+🍅/g, "").replace(/#[^\s#\[\]]+/g, "").replace(/\[\[[^\]]+\]\]/g, (match) => {
+      return match.slice(2, -2).split("|").pop() || "";
+    }).trim();
+    title = title.replace(/\s+/g, " ").trim();
+    if (!title)
+      return null;
+    return {
+      raw: line,
+      title,
+      status,
+      priority,
+      dueDate,
+      scheduledDate,
+      pomodoros,
+      pomodorosDone,
+      tags,
+      sourcePath,
+      lineNumber
+    };
+  }
+  /**
+   * Parse all tasks from a file
+   */
+  async parseFile(file) {
+    const tasks = [];
+    const content = await this.app.vault.read(file);
+    const lines = content.split("\n");
+    for (let i = 0; i < lines.length; i++) {
+      const task = this.parseTaskLine(lines[i], file.path, i + 1);
+      if (task) {
+        tasks.push(task);
+      }
+    }
+    return tasks;
+  }
+  /**
+   * Get all files from task sources
+   */
+  getSourceFiles() {
+    const files = [];
+    for (const source of this.taskSources) {
+      if (source.endsWith("/")) {
+        const folder = this.app.vault.getAbstractFileByPath(source.slice(0, -1));
+        if (folder instanceof import_obsidian6.TFolder) {
+          this.collectFilesFromFolder(folder, files);
+        }
+      } else {
+        const file = this.app.vault.getAbstractFileByPath(source);
+        if (file instanceof import_obsidian6.TFile && file.extension === "md") {
+          files.push(file);
+        }
+      }
+    }
+    return files;
+  }
+  /**
+   * Recursively collect markdown files from a folder
+   */
+  collectFilesFromFolder(folder, files) {
+    for (const child of folder.children) {
+      if (child instanceof import_obsidian6.TFile && child.extension === "md") {
+        if (!child.path.toLowerCase().includes("template")) {
+          files.push(child);
+        }
+      } else if (child instanceof import_obsidian6.TFolder) {
+        this.collectFilesFromFolder(child, files);
+      }
+    }
+  }
+  /**
+   * Parse all tasks from configured sources
+   */
+  async parseAllTasks() {
+    const allTasks = [];
+    const files = this.getSourceFiles();
+    for (const file of files) {
+      const tasks = await this.parseFile(file);
+      allTasks.push(...tasks);
+    }
+    return allTasks.sort((a, b) => {
+      const priorityOrder = { highest: 0, high: 1, normal: 2, low: 3 };
+      const priorityDiff = priorityOrder[a.priority] - priorityOrder[b.priority];
+      if (priorityDiff !== 0)
+        return priorityDiff;
+      if (a.dueDate && b.dueDate) {
+        return a.dueDate.getTime() - b.dueDate.getTime();
+      }
+      if (a.dueDate)
+        return -1;
+      if (b.dueDate)
+        return 1;
+      return 0;
+    });
+  }
+  /**
+   * Get tasks for the panel display
+   */
+  async getTasksForPanel(weekStart) {
+    const allTasks = await this.parseAllTasks();
+    const now = new Date();
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const tomorrow = new Date(today);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    const weekEnd = new Date(weekStart);
+    weekEnd.setDate(weekEnd.getDate() + 7);
+    const todayTasks = [];
+    const thisWeekTasks = [];
+    const overdueTasks = [];
+    for (const task of allTasks) {
+      if (task.status !== "todo" && task.status !== "in_progress")
+        continue;
+      if (task.dueDate) {
+        const dueDay = new Date(task.dueDate.getFullYear(), task.dueDate.getMonth(), task.dueDate.getDate());
+        if (dueDay < today) {
+          overdueTasks.push(task);
+        } else if (dueDay.getTime() === today.getTime()) {
+          todayTasks.push(task);
+        } else if (dueDay >= tomorrow && dueDay < weekEnd) {
+          thisWeekTasks.push(task);
+        }
+      }
+    }
+    return {
+      today: todayTasks,
+      thisWeek: thisWeekTasks,
+      overdue: overdueTasks
+    };
+  }
+  /**
+   * Infer category from task content
+   */
+  inferCategory(task) {
+    const text = (task.title + " " + task.tags.join(" ")).toLowerCase();
+    if (/会议|讨论|sync|meeting|周会|seminar|oneone/i.test(text)) {
+      return "meeting" /* MEETING */;
+    }
+    if (/家|爸|妈|gym|个人|生活|湿疹|挂号/i.test(text)) {
+      return "personal" /* PERSONAL */;
+    }
+    if (/报销|行政|申请|oa/i.test(text)) {
+      return "admin" /* ADMIN */;
+    }
+    if (/休息|午休|break/i.test(text)) {
+      return "rest" /* REST */;
+    }
+    return "focus" /* FOCUS */;
+  }
+  /**
+   * Check if a file path is a task source
+   */
+  isTaskSource(filePath) {
+    for (const source of this.taskSources) {
+      if (source.endsWith("/")) {
+        if (filePath.startsWith(source.slice(0, -1))) {
+          return true;
+        }
+      } else {
+        if (filePath === source) {
+          return true;
+        }
+      }
+    }
+    return false;
+  }
+  /**
+   * Find a task by file path and line number (exact location)
+   */
+  async findTaskByLocation(sourcePath, lineNumber) {
+    const file = this.app.vault.getAbstractFileByPath(sourcePath);
+    if (!(file instanceof import_obsidian6.TFile))
+      return null;
+    const content = await this.app.vault.read(file);
+    const lines = content.split("\n");
+    if (lineNumber < 1 || lineNumber > lines.length)
+      return null;
+    const line = lines[lineNumber - 1];
+    return this.parseTaskLine(line, sourcePath, lineNumber);
+  }
+  /**
+   * Find a task by title (fuzzy match)
+   */
+  async findTaskByTitle(title) {
+    const allTasks = await this.parseAllTasks();
+    const normalizedTitle = title.toLowerCase().trim();
+    let found = allTasks.find((t) => t.title.toLowerCase().trim() === normalizedTitle);
+    if (found)
+      return found;
+    found = allTasks.find(
+      (t) => t.title.toLowerCase().includes(normalizedTitle) || normalizedTitle.includes(t.title.toLowerCase())
+    );
+    return found || null;
+  }
+  /**
+   * Increment the done pomodoro count for a task
+   */
+  async incrementTaskDone(task) {
+    const file = this.app.vault.getAbstractFileByPath(task.sourcePath);
+    if (!(file instanceof import_obsidian6.TFile))
+      return false;
+    const content = await this.app.vault.read(file);
+    const lines = content.split("\n");
+    if (task.lineNumber < 1 || task.lineNumber > lines.length)
+      return false;
+    const lineIndex = task.lineNumber - 1;
+    let line = lines[lineIndex];
+    const doneMatch = line.match(/\[done::\s*(\d+)\]/);
+    if (doneMatch) {
+      const currentDone = parseInt(doneMatch[1], 10);
+      line = line.replace(/\[done::\s*\d+\]/, `[done:: ${currentDone + 1}]`);
+    } else {
+      const pomoMatch = line.match(/\[pomo::\s*\d+\]/);
+      if (pomoMatch) {
+        line = line.replace(/(\[pomo::\s*\d+\])/, `$1 [done:: 1]`);
+      } else {
+        line = line.trimEnd() + " [done:: 1]";
+      }
+    }
+    lines[lineIndex] = line;
+    await this.app.vault.modify(file, lines.join("\n"));
+    return true;
+  }
+};
+
+// src/floatingTimer.ts
+var { spawn } = require("child_process");
+var path = require("path");
+var fs = require("fs");
+var os = require("os");
+var FloatingTimerWindow = class {
+  constructor() {
+    this.currentTaskTitle = "";
+    this.onComplete = null;
+    this.nativeWindowProcess = null;
+    this.isNativeWindowActive = false;
+  }
+  /**
+   * Show the floating timer window
+   */
+  show(taskTitle, onComplete) {
+    this.closeNativeWindow();
+    this.currentTaskTitle = taskTitle;
+    this.onComplete = onComplete || null;
+    this.createNativeWindow(taskTitle);
+  }
+  /**
+   * Hide the floating timer window
+   */
+  hide() {
+    this.closeNativeWindow();
+  }
+  /**
+   * Update the timer display
+   */
+  updateDisplay(minutes, seconds, isRunning, mode = "work") {
+    if (this.isNativeWindowActive) {
+      this.updateNativeWindow(minutes, seconds, isRunning, mode);
+    }
+  }
+  /**
+   * Create a native macOS floating window using Swift
+   */
+  createNativeWindow(taskTitle) {
+    const swiftCode = `
+import Cocoa
+
+class TimerWindow: NSWindow {
+    var timeLabel: NSTextField!
+    var modeLabel: NSTextField!
+
+    init() {
+        super.init(
+            contentRect: NSRect(x: 0, y: 0, width: 120, height: 50),
+            styleMask: [.borderless],
+            backing: .buffered,
+            defer: false
+        )
+
+        // Window properties for floating behavior
+        self.level = .floating
+        self.backgroundColor = NSColor(white: 0.1, alpha: 0.85)
+        self.isOpaque = false
+        self.hasShadow = true
+        self.isMovableByWindowBackground = true
+        self.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
+
+        // Round corners
+        self.contentView?.wantsLayer = true
+        self.contentView?.layer?.cornerRadius = 10
+        self.contentView?.layer?.masksToBounds = true
+
+        // Position in top-right corner
+        if let screen = NSScreen.main {
+            let screenFrame = screen.visibleFrame
+            let x = screenFrame.maxX - 140
+            let y = screenFrame.maxY - 70
+            self.setFrameOrigin(NSPoint(x: x, y: y))
+        }
+
+        setupUI()
+    }
+
+    func setupUI() {
+        let contentView = self.contentView!
+
+        // Mode emoji
+        modeLabel = NSTextField(labelWithString: "\u{1F345}")
+        modeLabel.font = NSFont.systemFont(ofSize: 16)
+        modeLabel.alignment = .center
+        modeLabel.frame = NSRect(x: 8, y: 15, width: 24, height: 20)
+        contentView.addSubview(modeLabel)
+
+        // Time label
+        timeLabel = NSTextField(labelWithString: "25:00")
+        timeLabel.font = NSFont.monospacedDigitSystemFont(ofSize: 24, weight: .semibold)
+        timeLabel.textColor = NSColor(red: 0.3, green: 0.8, blue: 0.4, alpha: 1.0)
+        timeLabel.alignment = .center
+        timeLabel.frame = NSRect(x: 32, y: 12, width: 80, height: 28)
+        contentView.addSubview(timeLabel)
+    }
+
+    func updateTime(_ time: String, mode: String, isPaused: Bool) {
+        timeLabel.stringValue = time
+        modeLabel.stringValue = mode == "work" ? "\u{1F345}" : "\u2615"
+        timeLabel.textColor = isPaused
+            ? NSColor(red: 1.0, green: 0.76, blue: 0.03, alpha: 1.0)
+            : NSColor(red: 0.3, green: 0.8, blue: 0.4, alpha: 1.0)
+    }
+}
+
+class AppDelegate: NSObject, NSApplicationDelegate {
+    var window: TimerWindow!
+    var inputThread: Thread?
+
+    func applicationDidFinishLaunching(_ notification: Notification) {
+        window = TimerWindow()
+        window.makeKeyAndOrderFront(nil)
+
+        // Read from stdin for updates
+        inputThread = Thread {
+            let handle = FileHandle.standardInput
+            while true {
+                if let data = try? handle.availableData, !data.isEmpty {
+                    if let str = String(data: data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines) {
+                        if str == "QUIT" {
+                            DispatchQueue.main.async {
+                                NSApp.terminate(nil)
+                            }
+                            break
+                        }
+                        // Format: TIME|MODE|PAUSED (e.g., "24:30|work|false")
+                        let parts = str.split(separator: "|")
+                        if parts.count >= 3 {
+                            let time = String(parts[0])
+                            let mode = String(parts[1])
+                            let isPaused = parts[2] == "true"
+                            DispatchQueue.main.async {
+                                self.window.updateTime(time, mode: mode, isPaused: isPaused)
+                            }
+                        }
+                    }
+                } else {
+                    break
+                }
+            }
+        }
+        inputThread?.start()
+    }
+}
+
+let app = NSApplication.shared
+let delegate = AppDelegate()
+app.delegate = delegate
+app.setActivationPolicy(.accessory)
+app.run()
+`;
+    const scriptPath = path.join(os.tmpdir(), "focus-planner-timer.swift");
+    try {
+      fs.writeFileSync(scriptPath, swiftCode);
+      this.nativeWindowProcess = spawn("swift", [scriptPath], {
+        stdio: ["pipe", "pipe", "pipe"]
+      });
+      this.nativeWindowProcess.on("error", (err) => {
+        console.log("[Focus Planner] Native window error:", err);
+        this.isNativeWindowActive = false;
+      });
+      this.nativeWindowProcess.on("exit", () => {
+        console.log("[Focus Planner] Native window closed");
+        this.isNativeWindowActive = false;
+      });
+      this.isNativeWindowActive = true;
+      console.log("[Focus Planner] Native floating window started");
+    } catch (err) {
+      console.log("[Focus Planner] Failed to create native window:", err);
+      this.isNativeWindowActive = false;
+    }
+  }
+  updateNativeWindow(minutes, seconds, isRunning, mode) {
+    if (!this.nativeWindowProcess || !this.nativeWindowProcess.stdin)
+      return;
+    const timeStr = `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
+    const isPaused = !isRunning;
+    const message = `${timeStr}|${mode}|${isPaused}
+`;
+    try {
+      this.nativeWindowProcess.stdin.write(message);
+    } catch (err) {
+      this.isNativeWindowActive = false;
+    }
+  }
+  closeNativeWindow() {
+    if (this.nativeWindowProcess) {
+      try {
+        this.nativeWindowProcess.stdin.write("QUIT\n");
+        setTimeout(() => {
+          if (this.nativeWindowProcess) {
+            this.nativeWindowProcess.kill();
+            this.nativeWindowProcess = null;
+          }
+        }, 500);
+      } catch (err) {
+        if (this.nativeWindowProcess) {
+          this.nativeWindowProcess.kill();
+          this.nativeWindowProcess = null;
+        }
+      }
+    }
+    this.isNativeWindowActive = false;
+  }
+  isVisible() {
+    return this.isNativeWindowActive;
+  }
+};
+
 // src/main.ts
-var FocusPlannerPlugin = class extends import_obsidian6.Plugin {
+var FocusPlannerPlugin = class extends import_obsidian7.Plugin {
   constructor() {
     super(...arguments);
     this.syncIntervalId = null;
+    this.timerUpdateIntervalId = null;
+    this.timerUnsubscribe = null;
+    this.currentPomodoroEvent = null;
+    this.pomodoroCompletionHandled = false;
   }
   async onload() {
     await this.loadSettings();
     this.dailyNoteParser = new DailyNoteParser(this.app, this.settings);
     this.statsManager = new StatsManager(this.app, this.settings, this.dailyNoteParser);
+    this.taskParser = new TaskParser(this.app);
+    this.floatingTimer = new FloatingTimerWindow();
     this.feishuApi = new FeishuApi(
       this.settings.feishu,
       async (feishuSettings) => {
@@ -2769,6 +3492,8 @@ var FocusPlannerPlugin = class extends import_obsidian6.Plugin {
         view.onEventCreate = (data) => this.handleEventCreate(data);
         view.onEventDelete = (event) => this.handleEventDelete(event);
         view.onWeekChange = (weekStart) => this.getEventsForWeek(weekStart);
+        view.onGetTasks = (weekStart) => this.taskParser.getTasksForPanel(weekStart);
+        view.onTaskInferCategory = (task) => this.taskParser.inferCategory(task);
         return view;
       }
     );
@@ -2796,7 +3521,14 @@ var FocusPlannerPlugin = class extends import_obsidian6.Plugin {
     });
   }
   onunload() {
+    var _a;
     this.stopAutoSync();
+    this.stopTimerUpdate();
+    (_a = this.floatingTimer) == null ? void 0 : _a.hide();
+    if (this.timerUnsubscribe) {
+      this.timerUnsubscribe();
+      this.timerUnsubscribe = null;
+    }
   }
   async loadSettings() {
     this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());
@@ -2865,27 +3597,27 @@ var FocusPlannerPlugin = class extends import_obsidian6.Plugin {
   // Sync calendar from Feishu (supports both CalDAV and Open API)
   async syncFeishuCalendar() {
     if (!this.settings.feishu.syncEnabled) {
-      new import_obsidian6.Notice("\u98DE\u4E66\u540C\u6B65\u672A\u542F\u7528\uFF0C\u8BF7\u5148\u5728\u8BBE\u7F6E\u4E2D\u542F\u7528");
+      new import_obsidian7.Notice("\u98DE\u4E66\u540C\u6B65\u672A\u542F\u7528\uFF0C\u8BF7\u5148\u5728\u8BBE\u7F6E\u4E2D\u542F\u7528");
       return;
     }
     const useCalDav = this.settings.feishu.useCalDav;
     if (useCalDav) {
       if (!this.settings.feishu.caldavUsername || !this.settings.feishu.caldavPassword) {
-        new import_obsidian6.Notice("\u8BF7\u5148\u5728\u8BBE\u7F6E\u4E2D\u914D\u7F6E CalDAV \u7528\u6237\u540D\u548C\u5BC6\u7801");
+        new import_obsidian7.Notice("\u8BF7\u5148\u5728\u8BBE\u7F6E\u4E2D\u914D\u7F6E CalDAV \u7528\u6237\u540D\u548C\u5BC6\u7801");
         return;
       }
     } else {
       if (!this.settings.feishu.appId || !this.settings.feishu.appSecret) {
-        new import_obsidian6.Notice("\u8BF7\u5148\u5728\u8BBE\u7F6E\u4E2D\u914D\u7F6E\u98DE\u4E66 App ID \u548C App Secret");
+        new import_obsidian7.Notice("\u8BF7\u5148\u5728\u8BBE\u7F6E\u4E2D\u914D\u7F6E\u98DE\u4E66 App ID \u548C App Secret");
         return;
       }
       if (!this.settings.feishu.accessToken) {
-        new import_obsidian6.Notice("\u8BF7\u5148\u767B\u5F55\u98DE\u4E66\u8D26\u53F7");
+        new import_obsidian7.Notice("\u8BF7\u5148\u767B\u5F55\u98DE\u4E66\u8D26\u53F7");
         return;
       }
     }
     try {
-      new import_obsidian6.Notice(useCalDav ? "\u6B63\u5728\u901A\u8FC7 CalDAV \u540C\u6B65\u65E5\u5386..." : "\u6B63\u5728\u540C\u6B65\u98DE\u4E66\u65E5\u5386...");
+      new import_obsidian7.Notice(useCalDav ? "\u6B63\u5728\u901A\u8FC7 CalDAV \u540C\u6B65\u65E5\u5386..." : "\u6B63\u5728\u540C\u6B65\u98DE\u4E66\u65E5\u5386...");
       const leaves = this.app.workspace.getLeavesOfType(VIEW_TYPE_FOCUS_PLANNER);
       let weekStart;
       if (leaves.length > 0) {
@@ -2935,20 +3667,20 @@ var FocusPlannerPlugin = class extends import_obsidian6.Plugin {
         message += `
 \u8DF3\u8FC7 ${skippedDates.length} \u5929\uFF08\u521B\u5EFA\u5931\u8D25\uFF09`;
       }
-      new import_obsidian6.Notice(message);
+      new import_obsidian7.Notice(message);
     } catch (error) {
       console.error("Feishu sync error:", error);
-      new import_obsidian6.Notice(`\u540C\u6B65\u5931\u8D25: ${error.message}`);
+      new import_obsidian7.Notice(`\u540C\u6B65\u5931\u8D25: ${error.message}`);
     }
   }
   // Login to Feishu - Step 1: Open OAuth page
   async loginFeishu() {
     if (!this.settings.feishu.appId || !this.settings.feishu.appSecret) {
-      new import_obsidian6.Notice("\u8BF7\u5148\u5728\u8BBE\u7F6E\u4E2D\u914D\u7F6E\u98DE\u4E66 App ID \u548C App Secret");
+      new import_obsidian7.Notice("\u8BF7\u5148\u5728\u8BBE\u7F6E\u4E2D\u914D\u7F6E\u98DE\u4E66 App ID \u548C App Secret");
       return;
     }
     const oauthUrl = this.feishuApi.getOAuthUrl("http://localhost:3000/callback");
-    new import_obsidian6.Notice(
+    new import_obsidian7.Notice(
       "\u6D4F\u89C8\u5668\u5C06\u6253\u5F00\u98DE\u4E66\u6388\u6743\u9875\u9762\u3002\n\u767B\u5F55\u540E\uFF0C\u590D\u5236 URL \u4E2D\u7684 code \u53C2\u6570\uFF0C\n\u7136\u540E\u70B9\u51FB\u300C\u8F93\u5165\u6388\u6743\u7801\u300D\u6309\u94AE\u7C98\u8D34\u3002"
     );
     window.open(oauthUrl);
@@ -2956,21 +3688,21 @@ var FocusPlannerPlugin = class extends import_obsidian6.Plugin {
   // Login to Feishu - Step 2: Handle authorization code
   async handleAuthCode(code) {
     if (!code) {
-      new import_obsidian6.Notice("\u6388\u6743\u7801\u4E0D\u80FD\u4E3A\u7A7A");
+      new import_obsidian7.Notice("\u6388\u6743\u7801\u4E0D\u80FD\u4E3A\u7A7A");
       return;
     }
     try {
-      new import_obsidian6.Notice("\u6B63\u5728\u9A8C\u8BC1\u6388\u6743\u7801...");
+      new import_obsidian7.Notice("\u6B63\u5728\u9A8C\u8BC1\u6388\u6743\u7801...");
       const tokens = await this.feishuApi.getUserAccessToken(code);
       this.settings.feishu.accessToken = tokens.accessToken;
       this.settings.feishu.refreshToken = tokens.refreshToken;
       this.settings.feishu.tokenExpiry = Date.now() + tokens.expiresIn * 1e3;
       await this.saveSettings();
       this.startAutoSync();
-      new import_obsidian6.Notice("\u98DE\u4E66\u767B\u5F55\u6210\u529F\uFF01");
+      new import_obsidian7.Notice("\u98DE\u4E66\u767B\u5F55\u6210\u529F\uFF01");
     } catch (error) {
       console.error("Feishu auth error:", error);
-      new import_obsidian6.Notice(`\u767B\u5F55\u5931\u8D25: ${error.message}`);
+      new import_obsidian7.Notice(`\u767B\u5F55\u5931\u8D25: ${error.message}`);
     }
   }
   // Handle event click in calendar
@@ -2983,15 +3715,53 @@ var FocusPlannerPlugin = class extends import_obsidian6.Plugin {
     }
   }
   // Start pomodoro timer for an event
-  startPomodoroForEvent(event) {
+  async startPomodoroForEvent(event) {
     var _a, _b;
     const pomodoroPlugin = (_b = (_a = this.app.plugins) == null ? void 0 : _a.plugins) == null ? void 0 : _b["pomodoro-timer"];
     if (pomodoroPlugin) {
+      this.currentPomodoroEvent = event;
+      this.pomodoroCompletionHandled = false;
       this.app.commands.executeCommandById("pomodoro-timer:toggle-timer");
-      new import_obsidian6.Notice(`\u{1F345} \u5F00\u59CB\u756A\u8304\u949F: ${event.title}`);
+      this.floatingTimer.show(event.title, () => {
+        new import_obsidian7.Notice(`\u{1F345} \u756A\u8304\u949F\u5B8C\u6210: ${event.title}`);
+      });
+      this.startTimerUpdate();
+      new import_obsidian7.Notice(`\u{1F345} \u5F00\u59CB\u756A\u8304\u949F: ${event.title}`);
     } else {
-      new import_obsidian6.Notice("\u8BF7\u5148\u5B89\u88C5\u5E76\u542F\u7528 Pomodoro Timer \u63D2\u4EF6");
+      new import_obsidian7.Notice("\u8BF7\u5148\u5B89\u88C5\u5E76\u542F\u7528 Pomodoro Timer \u63D2\u4EF6");
     }
+  }
+  // Handle pomodoro completion - update task and refresh view
+  async handlePomodoroComplete() {
+    const event = this.currentPomodoroEvent;
+    if (!event)
+      return;
+    let taskUpdated = false;
+    let newDone = 0;
+    let totalPomos = 0;
+    if (event.taskSourcePath && event.taskLineNumber) {
+      const task = await this.taskParser.findTaskByLocation(event.taskSourcePath, event.taskLineNumber);
+      if (task) {
+        taskUpdated = await this.taskParser.incrementTaskDone(task);
+        newDone = task.pomodorosDone + 1;
+        totalPomos = task.pomodoros;
+      }
+    }
+    if (!taskUpdated) {
+      const task = await this.taskParser.findTaskByTitle(event.title);
+      if (task) {
+        taskUpdated = await this.taskParser.incrementTaskDone(task);
+        newDone = task.pomodorosDone + 1;
+        totalPomos = task.pomodoros;
+      }
+    }
+    if (taskUpdated) {
+      const total = totalPomos > 0 ? `/${totalPomos}` : "";
+      new import_obsidian7.Notice(`\u2705 \u756A\u8304\u949F\u5B8C\u6210!
+\u{1F4DD} ${event.title}: ${newDone}${total}\u{1F345}`);
+    }
+    await this.refreshView();
+    this.currentPomodoroEvent = null;
   }
   // Handle event deletion (context menu)
   async handleEventDelete(event) {
@@ -3003,7 +3773,7 @@ var FocusPlannerPlugin = class extends import_obsidian6.Plugin {
     await this.dailyNoteParser.removeEventFromDailyNote(date, event);
     await this.refreshView();
   }
-  // Handle event creation (double-click on calendar)
+  // Handle event creation (double-click on calendar or drag from task panel)
   async handleEventCreate(data) {
     const date = new Date(data.start);
     date.setHours(0, 0, 0, 0);
@@ -3013,7 +3783,10 @@ var FocusPlannerPlugin = class extends import_obsidian6.Plugin {
       start: data.start,
       end: data.end,
       category: data.category,
-      source: "local"
+      source: "local",
+      // Save task link for pomodoro tracking
+      taskSourcePath: data.taskSourcePath,
+      taskLineNumber: data.taskLineNumber
     };
     await this.dailyNoteParser.addEventToDailyNote(date, newEvent);
     await this.refreshView();
@@ -3057,6 +3830,83 @@ var FocusPlannerPlugin = class extends import_obsidian6.Plugin {
     if (this.syncIntervalId !== null) {
       window.clearInterval(this.syncIntervalId);
       this.syncIntervalId = null;
+    }
+  }
+  // Start subscribing to pomodoro timer state
+  startTimerUpdate() {
+    var _a, _b;
+    this.stopTimerUpdate();
+    const pomodoroPlugin = (_b = (_a = this.app.plugins) == null ? void 0 : _a.plugins) == null ? void 0 : _b["pomodoro-timer"];
+    if (!pomodoroPlugin) {
+      console.log("[Focus Planner] Pomodoro plugin not found");
+      return;
+    }
+    const timerStore = pomodoroPlugin.timer;
+    if (timerStore && typeof timerStore.subscribe === "function") {
+      console.log("[Focus Planner] Subscribing to pomodoro timer store");
+      this.timerUnsubscribe = timerStore.subscribe((state) => {
+        if (!state)
+          return;
+        const running = state.running || false;
+        const remained = state.remained || { millis: 0 };
+        const mode = state.mode || "work";
+        const totalSeconds = Math.ceil(remained.millis / 1e3);
+        const minutes = Math.floor(totalSeconds / 60);
+        const seconds = totalSeconds % 60;
+        this.floatingTimer.updateDisplay(minutes, seconds, running, mode);
+        if (state.finished && !running && mode === "work" && !this.pomodoroCompletionHandled) {
+          this.pomodoroCompletionHandled = true;
+          this.handlePomodoroComplete();
+          setTimeout(() => {
+            if (this.floatingTimer.isVisible()) {
+              this.floatingTimer.hide();
+              this.stopTimerUpdate();
+            }
+          }, 3e3);
+        }
+      });
+    } else {
+      console.log("[Focus Planner] Timer store not found, using polling fallback");
+      this.timerUpdateIntervalId = window.setInterval(() => {
+        this.updateFloatingTimerPolling();
+      }, 500);
+    }
+  }
+  // Stop timer update interval and unsubscribe
+  stopTimerUpdate() {
+    if (this.timerUnsubscribe) {
+      this.timerUnsubscribe();
+      this.timerUnsubscribe = null;
+    }
+    if (this.timerUpdateIntervalId !== null) {
+      window.clearInterval(this.timerUpdateIntervalId);
+      this.timerUpdateIntervalId = null;
+    }
+  }
+  // Fallback: polling update for floating timer
+  updateFloatingTimerPolling() {
+    var _a, _b;
+    const pomodoroPlugin = (_b = (_a = this.app.plugins) == null ? void 0 : _a.plugins) == null ? void 0 : _b["pomodoro-timer"];
+    if (!pomodoroPlugin) {
+      this.stopTimerUpdate();
+      this.floatingTimer.hide();
+      return;
+    }
+    const timerStore = pomodoroPlugin.timer;
+    if (timerStore) {
+      let state = null;
+      if (typeof timerStore.get === "function") {
+        state = timerStore.get();
+      }
+      if (state) {
+        const running = state.running || false;
+        const remained = state.remained || { millis: 0 };
+        const mode = state.mode || "work";
+        const totalSeconds = Math.ceil(remained.millis / 1e3);
+        const minutes = Math.floor(totalSeconds / 60);
+        const seconds = totalSeconds % 60;
+        this.floatingTimer.updateDisplay(minutes, seconds, running, mode);
+      }
     }
   }
 };

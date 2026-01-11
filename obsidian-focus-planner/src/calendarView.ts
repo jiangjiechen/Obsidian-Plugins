@@ -6,12 +6,13 @@ import {
   CATEGORY_LABELS,
   WeeklyStats,
 } from './types';
+import { ParsedTask, TaskPanelData } from './taskParser';
 
 export const VIEW_TYPE_FOCUS_PLANNER = 'focus-planner-view';
 
 // Time grid constants
 const START_HOUR = 7;  // Start at 7 AM
-const END_HOUR = 22;   // End at 10 PM
+const END_HOUR = 23;   // End at 11 PM
 const HOUR_HEIGHT = 60; // 60px per hour
 const TOTAL_HOURS = END_HOUR - START_HOUR;
 const SNAP_MINUTES = 15; // Snap to 15-minute intervals
@@ -34,6 +35,9 @@ export interface NewEventData {
   category: EventCategory;
   start: Date;
   end: Date;
+  // Link to original task (for pomodoro tracking)
+  taskSourcePath?: string;
+  taskLineNumber?: number;
 }
 
 // Event creation modal
@@ -205,6 +209,10 @@ export class FocusPlannerView extends ItemView {
   private dragState: DragState | null = null;
   private dayColumnsContainer: HTMLElement | null = null;
 
+  // Task panel
+  private taskPanel: HTMLElement | null = null;
+  private taskPanelData: TaskPanelData | null = null;
+
   // Callbacks
   onSyncFeishu: (() => Promise<void>) | null = null;
   onEventClick: ((event: CalendarEvent) => void) | null = null;
@@ -214,6 +222,10 @@ export class FocusPlannerView extends ItemView {
   onEventDelete: ((event: CalendarEvent) => Promise<void>) | null = null;
   getWeeklyStats: ((weekStart: Date) => Promise<WeeklyStats>) | null = null;
   onWeekChange: ((weekStart: Date) => Promise<CalendarEvent[]>) | null = null;
+
+  // Task panel callbacks
+  onGetTasks: ((weekStart: Date) => Promise<TaskPanelData>) | null = null;
+  onTaskInferCategory: ((task: ParsedTask) => EventCategory) | null = null;
 
   constructor(leaf: WorkspaceLeaf) {
     super(leaf);
@@ -247,15 +259,23 @@ export class FocusPlannerView extends ItemView {
     const header = container.createDiv({ cls: 'focus-planner-header' });
     this.createHeader(header);
 
-    // Calendar container (full width now)
-    this.calendarContainer = container.createDiv({ cls: 'focus-planner-calendar' });
+    // Main content area (calendar + task panel)
+    const mainContent = container.createDiv({ cls: 'focus-planner-main' });
+
+    // Calendar container
+    this.calendarContainer = mainContent.createDiv({ cls: 'focus-planner-calendar' });
+
+    // Task panel on the right
+    this.taskPanel = mainContent.createDiv({ cls: 'focus-planner-task-panel' });
 
     // Bottom summary bar
     this.summaryContainer = container.createDiv({ cls: 'focus-planner-summary' });
 
     // Load events for current week and render
     await this.loadEventsForCurrentWeek();
+    await this.loadTasksForPanel();
     this.renderCalendar();
+    this.renderTaskPanel();
     this.updateSummaryBar();
   }
 
@@ -432,11 +452,13 @@ export class FocusPlannerView extends ItemView {
     // Scrollable body
     const body = grid.createDiv({ cls: 'time-grid-body' });
 
-    // Time slots column
+    // Time slots column - set explicit height to match day columns
     const timeColumn = body.createDiv({ cls: 'time-column' });
+    timeColumn.style.height = `${TOTAL_HOURS * HOUR_HEIGHT}px`;
     for (let hour = START_HOUR; hour <= END_HOUR; hour++) {
       const slot = timeColumn.createDiv({ cls: 'time-slot' });
-      slot.style.height = `${HOUR_HEIGHT}px`;
+      // Last slot (END_HOUR) is just a boundary label, no height needed
+      slot.style.height = hour < END_HOUR ? `${HOUR_HEIGHT}px` : '0px';
       slot.createSpan({ text: `${String(hour).padStart(2, '0')}:00` });
     }
 
@@ -498,6 +520,9 @@ export class FocusPlannerView extends ItemView {
 
     // Add current time indicator if viewing current week
     this.addCurrentTimeIndicator(columnsContainer);
+
+    // Set up drop zones for task dragging
+    this.setupDropZones();
   }
 
   // Handle double-click on day column to create new event
@@ -972,6 +997,30 @@ export class FocusPlannerView extends ItemView {
   private showEventMenu(e: MouseEvent, event: CalendarEvent) {
     const menu = new Menu();
 
+    // Show full event title at the top (for events with truncated text)
+    menu.addItem((item) => {
+      item
+        .setTitle(`📌 ${event.title}`)
+        .setDisabled(true);
+    });
+
+    // Show time info
+    menu.addItem((item) => {
+      item
+        .setTitle(`⏱️ ${this.formatTime(event.start)} - ${this.formatTime(event.end)}`)
+        .setDisabled(true);
+    });
+
+    if (event.plannedPomodoros) {
+      menu.addItem((item) => {
+        item
+          .setTitle(`🎯 计划 ${event.plannedPomodoros} 个番茄钟`)
+          .setDisabled(true);
+      });
+    }
+
+    menu.addSeparator();
+
     // Start Pomodoro option
     menu.addItem((item) => {
       item
@@ -998,10 +1047,10 @@ export class FocusPlannerView extends ItemView {
       });
     }
 
-    menu.addSeparator();
-
     // Delete option (only for local events)
     if (event.source === 'local') {
+      menu.addSeparator();
+
       menu.addItem((item) => {
         item
           .setTitle('🗑️ 删除日程')
@@ -1016,23 +1065,6 @@ export class FocusPlannerView extends ItemView {
               }
             }
           });
-      });
-
-      menu.addSeparator();
-    }
-
-    // Show event info
-    menu.addItem((item) => {
-      item
-        .setTitle(`⏱️ ${this.formatTime(event.start)} - ${this.formatTime(event.end)}`)
-        .setDisabled(true);
-    });
-
-    if (event.plannedPomodoros) {
-      menu.addItem((item) => {
-        item
-          .setTitle(`🎯 计划 ${event.plannedPomodoros} 个番茄钟`)
-          .setDisabled(true);
       });
     }
 
@@ -1064,18 +1096,14 @@ export class FocusPlannerView extends ItemView {
 
     const top = (currentHour - START_HOUR + currentMinute / 60) * HOUR_HEIGHT;
 
-    // Create indicator
-    const indicator = container.createDiv({ cls: 'current-time-indicator' });
-    indicator.style.top = `${top}px`;
-
-    // Position it to span across the correct day
+    // Add indicator directly to the day column so it spans its full width
     const dayColumns = container.querySelectorAll('.day-column');
     if (dayColumns[dayIndex]) {
       const dayColumn = dayColumns[dayIndex] as HTMLElement;
-      const rect = dayColumn.getBoundingClientRect();
-      const containerRect = container.getBoundingClientRect();
-      indicator.style.left = `${rect.left - containerRect.left}px`;
-      indicator.style.width = `${rect.width}px`;
+      const indicator = dayColumn.createDiv({ cls: 'current-time-indicator' });
+      indicator.style.top = `${top}px`;
+      indicator.style.left = '0';
+      indicator.style.right = '0';
     }
   }
 
@@ -1165,5 +1193,273 @@ export class FocusPlannerView extends ItemView {
 
   async onClose() {
     // Cleanup
+  }
+
+  // ========== TASK PANEL ==========
+
+  // Load tasks for the panel
+  private async loadTasksForPanel() {
+    if (this.onGetTasks) {
+      this.taskPanelData = await this.onGetTasks(this.currentWeekStart);
+    }
+  }
+
+  // Render the task panel
+  private renderTaskPanel() {
+    if (!this.taskPanel) return;
+    this.taskPanel.empty();
+
+    // Panel header (fixed at top)
+    const header = this.taskPanel.createDiv({ cls: 'task-panel-header' });
+    header.createSpan({ text: '📋 待办任务' });
+
+    // Refresh button
+    const refreshBtn = header.createEl('button', { cls: 'task-panel-refresh', text: '↻' });
+    refreshBtn.addEventListener('click', async () => {
+      await this.loadTasksForPanel();
+      this.renderTaskPanel();
+    });
+
+    // Scrollable content area (flex: 1)
+    const content = this.taskPanel.createDiv({ cls: 'task-panel-content' });
+
+    if (!this.taskPanelData) {
+      content.createDiv({ cls: 'task-panel-empty', text: '加载中...' });
+      // Footer hint (fixed at bottom)
+      const hint = this.taskPanel.createDiv({ cls: 'task-panel-hint' });
+      hint.textContent = '💡 拖拽任务到日历创建日程';
+      return;
+    }
+
+    const { today, thisWeek, overdue } = this.taskPanelData;
+
+    // Overdue section
+    if (overdue.length > 0) {
+      this.renderTaskSection(content, '🔴 已过期', overdue, 'overdue');
+    }
+
+    // Today section
+    if (today.length > 0) {
+      this.renderTaskSection(content, '🟠 今日 Due', today, 'today');
+    }
+
+    // This week section
+    if (thisWeek.length > 0) {
+      this.renderTaskSection(content, '🟡 本周 Due', thisWeek, 'week');
+    }
+
+    // Empty state
+    if (overdue.length === 0 && today.length === 0 && thisWeek.length === 0) {
+      const emptyDiv = content.createDiv({ cls: 'task-panel-empty' });
+      emptyDiv.createSpan({ text: '暂无待办任务' });
+      emptyDiv.createEl('br');
+      emptyDiv.createSpan({ text: '任务来源: PeriodicNotes/, Meetings/' });
+    }
+
+    // Footer hint (fixed at bottom)
+    const hint = this.taskPanel.createDiv({ cls: 'task-panel-hint' });
+    hint.textContent = '💡 拖拽任务到日历创建日程';
+  }
+
+  // Render a section of tasks
+  private renderTaskSection(container: HTMLElement, title: string, tasks: ParsedTask[], sectionType: string) {
+    const section = container.createDiv({ cls: `task-panel-section ${sectionType}` });
+
+    const header = section.createDiv({ cls: 'task-panel-section-header' });
+    header.createSpan({ text: title });
+    header.createSpan({ cls: 'task-count', text: `(${tasks.length})` });
+
+    const taskList = section.createDiv({ cls: 'task-list' });
+
+    for (const task of tasks) {
+      const taskCard = this.createTaskCard(task);
+      taskList.appendChild(taskCard);
+    }
+  }
+
+  // Create a draggable task card
+  private createTaskCard(task: ParsedTask): HTMLElement {
+    const card = document.createElement('div');
+    card.className = 'task-card';
+    card.setAttribute('draggable', 'true');
+
+    // Priority class
+    card.addClass(`priority-${task.priority}`);
+
+    // Task title
+    const titleEl = card.createDiv({ cls: 'task-card-title' });
+
+    // Priority indicator
+    if (task.priority === 'highest') {
+      titleEl.createSpan({ cls: 'task-priority', text: '⏫ ' });
+    } else if (task.priority === 'high') {
+      titleEl.createSpan({ cls: 'task-priority', text: '🔺 ' });
+    }
+
+    titleEl.createSpan({ text: task.title });
+
+    // Meta info (pomodoros, due date, tags)
+    const metaEl = card.createDiv({ cls: 'task-meta' });
+
+    if (task.pomodoros > 0) {
+      metaEl.createSpan({ cls: 'task-pomo', text: `${task.pomodoros}🍅` });
+    }
+
+    if (task.dueDate) {
+      const dateStr = `${task.dueDate.getMonth() + 1}/${task.dueDate.getDate()}`;
+      metaEl.createSpan({ cls: 'task-due', text: `📅 ${dateStr}` });
+    }
+
+    if (task.tags.length > 0) {
+      const tagsStr = task.tags.slice(0, 2).map(t => `#${t}`).join(' ');
+      metaEl.createSpan({ cls: 'task-tags', text: tagsStr });
+    }
+
+    // Click to open source file at line number
+    card.addEventListener('click', (e: MouseEvent) => {
+      // Don't trigger if starting a drag
+      if (e.detail === 1) {
+        // Single click - open file at line
+        this.openTaskSource(task);
+      }
+    });
+
+    // Drag events
+    card.addEventListener('dragstart', (e: DragEvent) => {
+      card.addClass('dragging');
+      e.dataTransfer?.setData('application/json', JSON.stringify(task));
+      e.dataTransfer!.effectAllowed = 'copy';
+    });
+
+    card.addEventListener('dragend', () => {
+      card.removeClass('dragging');
+    });
+
+    return card;
+  }
+
+  // Set up drop zones on day columns
+  private setupDropZones() {
+    if (!this.dayColumnsContainer) return;
+
+    const dayColumns = this.dayColumnsContainer.querySelectorAll('.day-column');
+
+    dayColumns.forEach((col, index) => {
+      const column = col as HTMLElement;
+
+      column.addEventListener('dragover', (e: DragEvent) => {
+        e.preventDefault();
+        e.dataTransfer!.dropEffect = 'copy';
+        column.addClass('drop-target');
+      });
+
+      column.addEventListener('dragleave', () => {
+        column.removeClass('drop-target');
+      });
+
+      column.addEventListener('drop', (e: DragEvent) => {
+        e.preventDefault();
+        column.removeClass('drop-target');
+
+        const taskData = e.dataTransfer?.getData('application/json');
+        if (taskData) {
+          try {
+            const task = JSON.parse(taskData) as ParsedTask;
+            const date = new Date(this.currentWeekStart);
+            date.setDate(date.getDate() + index);
+            this.handleTaskDrop(e, task, date, column);
+          } catch (err) {
+            console.error('Failed to parse dropped task:', err);
+          }
+        }
+      });
+    });
+  }
+
+  // Handle dropping a task onto the calendar
+  private handleTaskDrop(e: DragEvent, task: ParsedTask, date: Date, dayColumn: HTMLElement) {
+    // Calculate drop position time
+    const rect = dayColumn.getBoundingClientRect();
+    const relativeY = e.clientY - rect.top;
+
+    // Calculate hour and minute
+    const totalMinutes = (relativeY / HOUR_HEIGHT) * 60 + START_HOUR * 60;
+    const snappedMinutes = Math.round(totalMinutes / SNAP_MINUTES) * SNAP_MINUTES;
+
+    const hour = Math.floor(snappedMinutes / 60);
+    const minute = snappedMinutes % 60;
+
+    // Clamp to valid range
+    const clampedHour = Math.max(START_HOUR, Math.min(END_HOUR - 1, hour));
+    const clampedMinute = minute >= 60 ? 0 : minute;
+
+    // Calculate duration from pomodoros (1 pomo = 25min, default = 60min)
+    const durationMinutes = task.pomodoros > 0 ? task.pomodoros * 25 : 60;
+
+    // Create start and end times
+    const startDate = new Date(date);
+    startDate.setHours(clampedHour, clampedMinute, 0, 0);
+
+    const endDate = new Date(startDate.getTime() + durationMinutes * 60 * 1000);
+
+    // Clamp end time to END_HOUR
+    if (endDate.getHours() > END_HOUR || (endDate.getHours() === END_HOUR && endDate.getMinutes() > 0)) {
+      endDate.setHours(END_HOUR, 0, 0, 0);
+    }
+
+    // Infer category
+    let category = EventCategory.FOCUS;
+    if (this.onTaskInferCategory) {
+      category = this.onTaskInferCategory(task);
+    }
+
+    // Create event with task link
+    const eventData: NewEventData = {
+      title: task.title,
+      category,
+      start: startDate,
+      end: endDate,
+      taskSourcePath: task.sourcePath,
+      taskLineNumber: task.lineNumber,
+    };
+
+    // Call event create callback
+    if (this.onEventCreate) {
+      this.onEventCreate(eventData).then(() => {
+        new Notice(`✅ 已创建日程: ${task.title}`);
+      }).catch((error) => {
+        new Notice(`创建失败: ${error.message}`);
+      });
+    }
+  }
+
+  // Refresh task panel (can be called externally)
+  async refreshTaskPanel() {
+    await this.loadTasksForPanel();
+    this.renderTaskPanel();
+  }
+
+  // Open task source file at specific line
+  private openTaskSource(task: ParsedTask) {
+    if (!task.sourcePath) return;
+
+    // Open the file and navigate to the line
+    const file = this.app.vault.getAbstractFileByPath(task.sourcePath);
+    if (file) {
+      // Open file in a new leaf
+      this.app.workspace.openLinkText('', task.sourcePath).then(() => {
+        // After opening, scroll to the line
+        const activeView = this.app.workspace.getActiveViewOfType(ItemView);
+        if (activeView) {
+          // @ts-ignore - accessing internal editor API
+          const editor = activeView.editor;
+          if (editor) {
+            const line = task.lineNumber - 1; // Editor uses 0-based indexing
+            editor.setCursor({ line, ch: 0 });
+            editor.scrollIntoView({ from: { line, ch: 0 }, to: { line, ch: 0 } }, true);
+          }
+        }
+      });
+    }
   }
 }
