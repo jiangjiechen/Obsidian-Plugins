@@ -1329,19 +1329,19 @@ var DailyNoteParser = class {
 ## \u6BCF\u65E5\u4E09\u601D
 
 **\u6628\u65E5\uFF08Yesterday\uFF09**
-1.
+1. 
 
 **\u4ECA\u65E5\uFF08Today\uFF09**
-1.
+1. 
 
 **\u963B\u788D\uFF08Blockers\uFF09**
-1.
+1. 
 
 ## \u4ECA\u65E5TODO
 
-- [ ]
-- [ ]
-- [ ]
+- [ ] 
+- [ ] 
+- [ ] 
 
 ## Day Planner
 

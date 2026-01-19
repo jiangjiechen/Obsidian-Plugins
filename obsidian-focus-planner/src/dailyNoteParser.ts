@@ -312,19 +312,19 @@ export class DailyNoteParser {
 ## 每日三思
 
 **昨日（Yesterday）**
-1.
+1. 
 
 **今日（Today）**
-1.
+1. 
 
 **阻碍（Blockers）**
-1.
+1. 
 
 ## 今日TODO
 
-- [ ]
-- [ ]
-- [ ]
+- [ ] 
+- [ ] 
+- [ ] 
 
 ## Day Planner
 
