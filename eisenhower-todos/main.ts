@@ -175,9 +175,21 @@ export default class EisenhowerTodosPlugin extends Plugin {
 
   /** ========== 写回：完成/重要/紧急 ========= */
   async writeBackToggleDone(t: TaskItem, done: boolean) {
-    await this.vaultLineTransform(t.file, t.line, (line) =>
-      line.replace(/^(\s*[-*]\s+\[)\s(\]\s+)/, `$1${done ? "x" : " "}$2`)
-    );
+    const today = moment().format(this.settings.dateFormat);
+    await this.vaultLineTransform(t.file, t.line, (line) => {
+      if (done) {
+        // 勾选：[ ] → [x]，并追加 ✅ 日期
+        line = line.replace(/^(\s*[-*]\s+\[)\s(\]\s+)/, `$1x$2`);
+        // 先移除可能已有的 ✅ 日期，避免重复
+        line = line.replace(/\s*✅\s*\d{4}-\d{2}-\d{2}/, "");
+        line = `${line} ✅ ${today}`;
+      } else {
+        // 取消勾选：[x] → [ ]，并移除 ✅ 日期
+        line = line.replace(/^(\s*[-*]\s+\[)[xX](\]\s+)/, `$1 $2`);
+        line = line.replace(/\s*✅\s*\d{4}-\d{2}-\d{2}/, "");
+      }
+      return line;
+    });
   }
 
   async writeBackSetImportanceUrgency(t: TaskItem, important: boolean, urgent: boolean) {
