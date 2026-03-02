@@ -276,7 +276,10 @@ export class FeishuApi {
     const rawItems = response.json.data?.items || [];
     console.log('[Focus Planner] Raw events from calendar', calendarId, ':', rawItems.length);
 
-    const events: CalendarEvent[] = [];
+    // 分开处理：单次事件（含修改后的例外实例）vs 周期日程展开的实例
+    const singleEvents: CalendarEvent[] = [];
+    const recurringInstances: CalendarEvent[] = [];
+
     for (const item of rawItems) {
       // 跳过已取消的事件
       if (item.status === 'cancelled') {
@@ -285,10 +288,30 @@ export class FeishuApi {
 
       // 解析事件，可能返回多个实例（重复日程）
       const parsedEvents = this.parseFeishuEvent(item, queryStart, queryEnd);
-      for (const event of parsedEvents) {
-        events.push(event);
+      if (item.recurrence) {
+        // 有 RRULE 的是周期性父日程展开的实例
+        recurringInstances.push(...parsedEvents);
+      } else {
+        // 无 RRULE 的是单次事件或修改后的例外实例（exception）
+        singleEvents.push(...parsedEvents);
       }
     }
+
+    // 去重：如果某天某个标题既有单次事件（例外），又有周期展开实例，
+    // 优先保留单次事件（它是在飞书中修改过的例外实例）
+    const exceptionKeys = new Set(
+      singleEvents.map(e => `${e.title}|${e.start.toISOString().split('T')[0]}`)
+    );
+    const filteredRecurring = recurringInstances.filter(e => {
+      const key = `${e.title}|${e.start.toISOString().split('T')[0]}`;
+      if (exceptionKeys.has(key)) {
+        console.log('[Focus Planner] Skipping recurring instance overridden by exception:', e.title, e.start);
+        return false;
+      }
+      return true;
+    });
+
+    const events = [...singleEvents, ...filteredRecurring];
 
     console.log('[Focus Planner] Events from calendar', calendarId, ':', events.length);
     return events;

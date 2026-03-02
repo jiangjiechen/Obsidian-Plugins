@@ -291,16 +291,31 @@ var FeishuApi = class {
     }
     const rawItems = ((_d = response.json.data) == null ? void 0 : _d.items) || [];
     console.log("[Focus Planner] Raw events from calendar", calendarId, ":", rawItems.length);
-    const events = [];
+    const singleEvents = [];
+    const recurringInstances = [];
     for (const item of rawItems) {
       if (item.status === "cancelled") {
         continue;
       }
       const parsedEvents = this.parseFeishuEvent(item, queryStart, queryEnd);
-      for (const event of parsedEvents) {
-        events.push(event);
+      if (item.recurrence) {
+        recurringInstances.push(...parsedEvents);
+      } else {
+        singleEvents.push(...parsedEvents);
       }
     }
+    const exceptionKeys = new Set(
+      singleEvents.map((e) => `${e.title}|${e.start.toISOString().split("T")[0]}`)
+    );
+    const filteredRecurring = recurringInstances.filter((e) => {
+      const key = `${e.title}|${e.start.toISOString().split("T")[0]}`;
+      if (exceptionKeys.has(key)) {
+        console.log("[Focus Planner] Skipping recurring instance overridden by exception:", e.title, e.start);
+        return false;
+      }
+      return true;
+    });
+    const events = [...singleEvents, ...filteredRecurring];
     console.log("[Focus Planner] Events from calendar", calendarId, ":", events.length);
     return events;
   }
@@ -924,58 +939,96 @@ var CalDavClient = class {
   }
   // Parse iCalendar (.ics) format
   parseICalendar(icsData, queryStart, queryEnd) {
-    const events = [];
+    var _a, _b;
     icsData = icsData.replace(/\r\n[ \t]/g, "").replace(/\n[ \t]/g, "");
+    const allVEvents = [];
     const veventMatches = icsData.matchAll(/BEGIN:VEVENT[\s\S]*?END:VEVENT/g);
     for (const match of veventMatches) {
       const vevent = match[0];
-      const uid = this.extractIcsProperty(vevent, "UID");
-      const summary = this.extractIcsProperty(vevent, "SUMMARY");
-      const dtstart = this.extractIcsProperty(vevent, "DTSTART");
-      const dtend = this.extractIcsProperty(vevent, "DTEND");
-      const rrule = this.extractIcsProperty(vevent, "RRULE");
-      const status = this.extractIcsProperty(vevent, "STATUS");
-      if ((status == null ? void 0 : status.toUpperCase()) === "CANCELLED") {
+      allVEvents.push({
+        uid: this.extractIcsProperty(vevent, "UID"),
+        summary: this.extractIcsProperty(vevent, "SUMMARY") || "Untitled Event",
+        dtstart: this.extractIcsProperty(vevent, "DTSTART") || "",
+        dtend: this.extractIcsProperty(vevent, "DTEND"),
+        rrule: this.extractIcsProperty(vevent, "RRULE"),
+        recurrenceId: this.extractIcsProperty(vevent, "RECURRENCE-ID"),
+        status: this.extractIcsProperty(vevent, "STATUS")
+      });
+    }
+    const exceptionEvents = [];
+    const normalEvents = [];
+    for (const v of allVEvents) {
+      if (v.recurrenceId) {
+        exceptionEvents.push(v);
+      } else {
+        normalEvents.push(v);
+      }
+    }
+    const exceptionKeys = /* @__PURE__ */ new Set();
+    const events = [];
+    for (const v of exceptionEvents) {
+      if (((_a = v.status) == null ? void 0 : _a.toUpperCase()) === "CANCELLED")
+        continue;
+      if (!v.dtstart)
+        continue;
+      const start = this.parseIcsDateTime(v.dtstart);
+      const end = v.dtend ? this.parseIcsDateTime(v.dtend) : new Date(start.getTime() + 36e5);
+      if (end >= queryStart && start <= queryEnd) {
+        const dayKey = `${v.summary}|${start.toISOString().split("T")[0]}`;
+        exceptionKeys.add(dayKey);
+        events.push({
+          id: `caldav-${v.uid || Date.now()}`,
+          title: v.summary,
+          start,
+          end,
+          category: this.categorizeEvent(v.summary),
+          source: "feishu",
+          feishuEventId: v.uid || void 0
+        });
+      }
+    }
+    for (const v of normalEvents) {
+      if (((_b = v.status) == null ? void 0 : _b.toUpperCase()) === "CANCELLED")
+        continue;
+      if (!v.dtstart) {
+        console.log("[Focus Planner] Skipping event without DTSTART:", v.summary);
         continue;
       }
-      if (!dtstart) {
-        console.log("[Focus Planner] Skipping event without DTSTART:", summary);
-        continue;
-      }
-      const start = this.parseIcsDateTime(dtstart);
-      const end = dtend ? this.parseIcsDateTime(dtend) : new Date(start.getTime() + 36e5);
-      if (!start || !end) {
-        console.log("[Focus Planner] Cannot parse dates for event:", summary);
-        continue;
-      }
+      const start = this.parseIcsDateTime(v.dtstart);
+      const end = v.dtend ? this.parseIcsDateTime(v.dtend) : new Date(start.getTime() + 36e5);
       const duration = end.getTime() - start.getTime();
-      const title = summary || "Untitled Event";
+      const title = v.summary;
       const category = this.categorizeEvent(title);
-      if (!rrule) {
+      if (!v.rrule) {
         if (end >= queryStart && start <= queryEnd) {
           events.push({
-            id: `caldav-${uid || Date.now()}`,
+            id: `caldav-${v.uid || Date.now()}`,
             title,
             start,
             end,
             category,
             source: "feishu",
-            feishuEventId: uid || void 0
+            feishuEventId: v.uid || void 0
           });
         }
         continue;
       }
-      const instances = this.expandRecurrence(start, duration, rrule, queryStart, queryEnd);
+      const instances = this.expandRecurrence(start, duration, v.rrule, queryStart, queryEnd);
       for (let i = 0; i < instances.length; i++) {
         const instanceStart = instances[i];
+        const dayKey = `${title}|${instanceStart.toISOString().split("T")[0]}`;
+        if (exceptionKeys.has(dayKey)) {
+          console.log("[Focus Planner] Skipping recurring instance overridden by exception:", title, instanceStart);
+          continue;
+        }
         events.push({
-          id: `caldav-${uid || Date.now()}-${i}`,
+          id: `caldav-${v.uid || Date.now()}-${i}`,
           title,
           start: instanceStart,
           end: new Date(instanceStart.getTime() + duration),
           category,
           source: "feishu",
-          feishuEventId: uid || void 0
+          feishuEventId: v.uid || void 0
         });
       }
     }

@@ -636,77 +636,117 @@ export class CalDavClient {
 
   // Parse iCalendar (.ics) format
   private parseICalendar(icsData: string, queryStart: Date, queryEnd: Date): CalendarEvent[] {
-    const events: CalendarEvent[] = [];
-
     // Unfold long lines (lines starting with space/tab are continuations)
     icsData = icsData.replace(/\r\n[ \t]/g, '').replace(/\n[ \t]/g, '');
 
-    // Split into VEVENT blocks
-    const veventMatches = icsData.matchAll(/BEGIN:VEVENT[\s\S]*?END:VEVENT/g);
+    // First pass: collect all VEVENT blocks and classify them
+    type VEventInfo = {
+      uid: string | null;
+      summary: string;
+      dtstart: string;
+      dtend: string | null;
+      rrule: string | null;
+      recurrenceId: string | null; // RECURRENCE-ID marks an exception/modified occurrence
+      status: string | null;
+    };
 
+    const allVEvents: VEventInfo[] = [];
+    const veventMatches = icsData.matchAll(/BEGIN:VEVENT[\s\S]*?END:VEVENT/g);
     for (const match of veventMatches) {
       const vevent = match[0];
+      allVEvents.push({
+        uid: this.extractIcsProperty(vevent, 'UID'),
+        summary: this.extractIcsProperty(vevent, 'SUMMARY') || 'Untitled Event',
+        dtstart: this.extractIcsProperty(vevent, 'DTSTART') || '',
+        dtend: this.extractIcsProperty(vevent, 'DTEND'),
+        rrule: this.extractIcsProperty(vevent, 'RRULE'),
+        recurrenceId: this.extractIcsProperty(vevent, 'RECURRENCE-ID'),
+        status: this.extractIcsProperty(vevent, 'STATUS'),
+      });
+    }
 
-      // Extract properties
-      const uid = this.extractIcsProperty(vevent, 'UID');
-      const summary = this.extractIcsProperty(vevent, 'SUMMARY');
-      const dtstart = this.extractIcsProperty(vevent, 'DTSTART');
-      const dtend = this.extractIcsProperty(vevent, 'DTEND');
-      const rrule = this.extractIcsProperty(vevent, 'RRULE');
-      const status = this.extractIcsProperty(vevent, 'STATUS');
+    // 分离例外实例（有 RECURRENCE-ID）和普通/周期父事件
+    const exceptionEvents: VEventInfo[] = [];
+    const normalEvents: VEventInfo[] = [];
+    for (const v of allVEvents) {
+      if (v.recurrenceId) {
+        exceptionEvents.push(v);
+      } else {
+        normalEvents.push(v);
+      }
+    }
 
-      // Skip cancelled events
-      if (status?.toUpperCase() === 'CANCELLED') {
+    // 建立例外实例的"title + 日期"集合，用于过滤掉父周期事件展开的同日同名实例
+    const exceptionKeys = new Set<string>();
+    const events: CalendarEvent[] = [];
+
+    for (const v of exceptionEvents) {
+      if (v.status?.toUpperCase() === 'CANCELLED') continue;
+      if (!v.dtstart) continue;
+      const start = this.parseIcsDateTime(v.dtstart);
+      const end = v.dtend ? this.parseIcsDateTime(v.dtend) : new Date(start.getTime() + 3600000);
+      if (end >= queryStart && start <= queryEnd) {
+        const dayKey = `${v.summary}|${start.toISOString().split('T')[0]}`;
+        exceptionKeys.add(dayKey);
+        events.push({
+          id: `caldav-${v.uid || Date.now()}`,
+          title: v.summary,
+          start,
+          end,
+          category: this.categorizeEvent(v.summary),
+          source: 'feishu',
+          feishuEventId: v.uid || undefined,
+        });
+      }
+    }
+
+    // 处理普通事件和周期父事件（跳过被例外实例覆盖的日期）
+    for (const v of normalEvents) {
+      if (v.status?.toUpperCase() === 'CANCELLED') continue;
+      if (!v.dtstart) {
+        console.log('[Focus Planner] Skipping event without DTSTART:', v.summary);
         continue;
       }
 
-      if (!dtstart) {
-        console.log('[Focus Planner] Skipping event without DTSTART:', summary);
-        continue;
-      }
-
-      // Parse start and end times
-      const start = this.parseIcsDateTime(dtstart);
-      const end = dtend ? this.parseIcsDateTime(dtend) : new Date(start.getTime() + 3600000); // Default 1 hour
-
-      if (!start || !end) {
-        console.log('[Focus Planner] Cannot parse dates for event:', summary);
-        continue;
-      }
-
+      const start = this.parseIcsDateTime(v.dtstart);
+      const end = v.dtend ? this.parseIcsDateTime(v.dtend) : new Date(start.getTime() + 3600000);
       const duration = end.getTime() - start.getTime();
-      const title = summary || 'Untitled Event';
+      const title = v.summary;
       const category = this.categorizeEvent(title);
 
-      // If no recurrence, check if in range
-      if (!rrule) {
+      if (!v.rrule) {
+        // 非周期事件
         if (end >= queryStart && start <= queryEnd) {
           events.push({
-            id: `caldav-${uid || Date.now()}`,
+            id: `caldav-${v.uid || Date.now()}`,
             title,
             start,
             end,
             category,
             source: 'feishu',
-            feishuEventId: uid || undefined,
+            feishuEventId: v.uid || undefined,
           });
         }
         continue;
       }
 
-      // Handle recurring events - CalDAV should already expand them
-      // but some servers don't, so we handle it here too
-      const instances = this.expandRecurrence(start, duration, rrule, queryStart, queryEnd);
+      // 周期父事件：展开实例，跳过已有例外覆盖的日期
+      const instances = this.expandRecurrence(start, duration, v.rrule, queryStart, queryEnd);
       for (let i = 0; i < instances.length; i++) {
         const instanceStart = instances[i];
+        const dayKey = `${title}|${instanceStart.toISOString().split('T')[0]}`;
+        if (exceptionKeys.has(dayKey)) {
+          console.log('[Focus Planner] Skipping recurring instance overridden by exception:', title, instanceStart);
+          continue;
+        }
         events.push({
-          id: `caldav-${uid || Date.now()}-${i}`,
+          id: `caldav-${v.uid || Date.now()}-${i}`,
           title,
           start: instanceStart,
           end: new Date(instanceStart.getTime() + duration),
           category,
           source: 'feishu',
-          feishuEventId: uid || undefined,
+          feishuEventId: v.uid || undefined,
         });
       }
     }
