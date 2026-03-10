@@ -79,6 +79,14 @@ Default: `0. PeriodicNotes/YYYY/Daily/MM/YYYY-MM-DD.md`
 
 Customize in settings to match your vault structure.
 
+### Task Sources / 待办任务来源
+
+Configure task source folders or files in settings.
+
+- One source per line
+- Folder sources should end with `/`
+- File sources should use the full Markdown path
+
 ### Category Keywords / 分类关键词
 
 Customize which keywords trigger each category in settings.

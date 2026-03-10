@@ -14,6 +14,7 @@ import { FocusPlannerView, VIEW_TYPE_FOCUS_PLANNER, NewEventData } from './calen
 import { FocusPlannerSettingTab } from './settingsTab';
 import { TaskParser, TaskPanelData, ParsedTask } from './taskParser';
 import { FloatingTimerWindow } from './floatingTimer';
+import { normalizeTaskSources } from './taskSourceConfig';
 
 export default class FocusPlannerPlugin extends Plugin {
   settings: FocusPlannerSettings;
@@ -36,7 +37,7 @@ export default class FocusPlannerPlugin extends Plugin {
     // Initialize components
     this.dailyNoteParser = new DailyNoteParser(this.app, this.settings);
     this.statsManager = new StatsManager(this.app, this.settings, this.dailyNoteParser);
-    this.taskParser = new TaskParser(this.app);
+    this.taskParser = new TaskParser(this.app, this.settings.taskSources);
     this.floatingTimer = new FloatingTimerWindow();
     this.feishuApi = new FeishuApi(
       this.settings.feishu,
@@ -115,9 +116,11 @@ export default class FocusPlannerPlugin extends Plugin {
 
   async loadSettings() {
     this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());
+    this.settings.taskSources = normalizeTaskSources(this.settings.taskSources);
   }
 
   async saveSettings() {
+    this.settings.taskSources = normalizeTaskSources(this.settings.taskSources);
     await this.saveData(this.settings);
 
     // Update components with new settings
@@ -126,6 +129,9 @@ export default class FocusPlannerPlugin extends Plugin {
     }
     if (this.statsManager) {
       this.statsManager.updateSettings(this.settings);
+    }
+    if (this.taskParser) {
+      this.taskParser.updateTaskSources(this.settings.taskSources);
     }
     if (this.feishuApi) {
       this.feishuApi.updateSettings(this.settings.feishu);
@@ -136,6 +142,8 @@ export default class FocusPlannerPlugin extends Plugin {
 
     // Restart auto-sync with new interval
     this.startAutoSync();
+
+    await this.refreshView();
   }
 
   // Activate the Focus Planner view
@@ -193,6 +201,7 @@ export default class FocusPlannerPlugin extends Plugin {
     // Get events for that week
     const events = await this.getEventsForWeek(weekStart);
     view.setEvents(events);
+    await view.refreshTaskPanel();
   }
 
   // Sync calendar from Feishu (supports both CalDAV and Open API)

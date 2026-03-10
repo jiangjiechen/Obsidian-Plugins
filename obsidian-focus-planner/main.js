@@ -29,6 +29,22 @@ __export(main_exports, {
 module.exports = __toCommonJS(main_exports);
 var import_obsidian7 = require("obsidian");
 
+// src/taskSourceConfig.ts
+var DEFAULT_TASK_SOURCES = [
+  "PeriodicNotes/",
+  "Meetings/",
+  "Personal/",
+  "Clippings/"
+];
+function normalizeTaskSources(taskSources) {
+  const normalized = (taskSources != null ? taskSources : []).map((source) => source.trim()).filter((source) => source.length > 0);
+  return normalized.length > 0 ? normalized : [...DEFAULT_TASK_SOURCES];
+}
+function formatTaskSourceSummary(taskSources) {
+  const normalized = normalizeTaskSources(taskSources);
+  return `\u4EFB\u52A1\u6765\u6E90: ${normalized.join(", ")}`;
+}
+
 // src/types.ts
 var EventCategory = /* @__PURE__ */ ((EventCategory3) => {
   EventCategory3["FOCUS"] = "focus";
@@ -67,6 +83,7 @@ var DEFAULT_SETTINGS = {
   },
   dailyNotePath: "PeriodicNotes/YYYY/Daily/MM/YYYY-MM-DD.md",
   weeklyNotePath: "PeriodicNotes/YYYY/Weekly/YYYY-WXX.md",
+  taskSources: [...DEFAULT_TASK_SOURCES],
   pomodoroMinutes: 25,
   categoryKeywords: {
     ["focus" /* FOCUS */]: ["\u4E13\u6CE8", "\u5B66\u4E60", "\u9605\u8BFB", "\u4EE3\u7801", "demo", "\u8BBA\u6587", "RL", "nanoGPT"],
@@ -2647,7 +2664,7 @@ var FocusPlannerView = class extends import_obsidian4.ItemView {
       hint2.textContent = "\u{1F4A1} \u62D6\u62FD\u4EFB\u52A1\u5230\u65E5\u5386\u521B\u5EFA\u65E5\u7A0B";
       return;
     }
-    const { today, thisWeek, overdue } = this.taskPanelData;
+    const { today, thisWeek, overdue, sourceSummary } = this.taskPanelData;
     if (overdue.length > 0) {
       this.renderTaskSection(content, "\u{1F534} \u5DF2\u8FC7\u671F", overdue, "overdue");
     }
@@ -2661,7 +2678,7 @@ var FocusPlannerView = class extends import_obsidian4.ItemView {
       const emptyDiv = content.createDiv({ cls: "task-panel-empty" });
       emptyDiv.createSpan({ text: "\u6682\u65E0\u5F85\u529E\u4EFB\u52A1" });
       emptyDiv.createEl("br");
-      emptyDiv.createSpan({ text: "\u4EFB\u52A1\u6765\u6E90: PeriodicNotes/, Meetings/" });
+      emptyDiv.createSpan({ text: sourceSummary });
     }
     const hint = this.taskPanel.createDiv({ cls: "task-panel-hint" });
     hint.textContent = "\u{1F4A1} \u62D6\u62FD\u4EFB\u52A1\u5230\u65E5\u5386\u521B\u5EFA\u65E5\u7A0B";
@@ -2964,6 +2981,14 @@ var FocusPlannerSettingTab = class extends import_obsidian5.PluginSettingTab {
         await this.plugin.saveSettings();
       })
     );
+    new import_obsidian5.Setting(containerEl).setName("\u5F85\u529E\u4EFB\u52A1\u6765\u6E90").setDesc("\u6BCF\u884C\u4E00\u4E2A\u6765\u6E90\u3002\u6587\u4EF6\u5939\u8BF7\u4EE5 / \u7ED3\u5C3E\uFF0C\u5355\u4E2A\u6587\u4EF6\u8BF7\u586B\u5199\u5B8C\u6574 Markdown \u8DEF\u5F84\u3002").addTextArea((text) => {
+      text.setPlaceholder("PeriodicNotes/\nMeetings/").setValue(this.plugin.settings.taskSources.join("\n")).onChange(async (value) => {
+        this.plugin.settings.taskSources = normalizeTaskSources(value.split("\n"));
+        await this.plugin.saveSettings();
+      });
+      text.inputEl.rows = 4;
+      text.inputEl.style.width = "100%";
+    });
     containerEl.createEl("h3", { text: "\u756A\u8304\u949F\u8BBE\u7F6E" });
     new import_obsidian5.Setting(containerEl).setName("\u756A\u8304\u949F\u65F6\u957F").setDesc("\u6BCF\u4E2A\u756A\u8304\u949F\u7684\u5206\u949F\u6570").addSlider(
       (slider) => slider.setLimits(15, 45, 5).setValue(this.plugin.settings.pomodoroMinutes).setDynamicTooltip().onChange(async (value) => {
@@ -3007,16 +3032,10 @@ var STATUS_MAP = {
 var TaskParser = class {
   constructor(app, taskSources) {
     this.app = app;
-    this.taskSources = taskSources || [
-      "PeriodicNotes/",
-      // Daily notes with 今日TODO
-      "Meetings/",
-      // Meeting notes with tasks
-      "Personal/",
-      // Personal tasks
-      "Clippings/"
-      // Clipped content with tasks
-    ];
+    this.taskSources = normalizeTaskSources(taskSources);
+  }
+  updateTaskSources(taskSources) {
+    this.taskSources = normalizeTaskSources(taskSources);
   }
   /**
    * Parse a single task line
@@ -3198,7 +3217,8 @@ var TaskParser = class {
     return {
       today: todayTasks,
       thisWeek: thisWeekTasks,
-      overdue: overdueTasks
+      overdue: overdueTasks,
+      sourceSummary: formatTaskSourceSummary(this.taskSources)
     };
   }
   /**
@@ -3520,7 +3540,7 @@ var FocusPlannerPlugin = class extends import_obsidian7.Plugin {
     await this.loadSettings();
     this.dailyNoteParser = new DailyNoteParser(this.app, this.settings);
     this.statsManager = new StatsManager(this.app, this.settings, this.dailyNoteParser);
-    this.taskParser = new TaskParser(this.app);
+    this.taskParser = new TaskParser(this.app, this.settings.taskSources);
     this.floatingTimer = new FloatingTimerWindow();
     this.feishuApi = new FeishuApi(
       this.settings.feishu,
@@ -3585,14 +3605,19 @@ var FocusPlannerPlugin = class extends import_obsidian7.Plugin {
   }
   async loadSettings() {
     this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());
+    this.settings.taskSources = normalizeTaskSources(this.settings.taskSources);
   }
   async saveSettings() {
+    this.settings.taskSources = normalizeTaskSources(this.settings.taskSources);
     await this.saveData(this.settings);
     if (this.dailyNoteParser) {
       this.dailyNoteParser.updateSettings(this.settings);
     }
     if (this.statsManager) {
       this.statsManager.updateSettings(this.settings);
+    }
+    if (this.taskParser) {
+      this.taskParser.updateTaskSources(this.settings.taskSources);
     }
     if (this.feishuApi) {
       this.feishuApi.updateSettings(this.settings.feishu);
@@ -3601,6 +3626,7 @@ var FocusPlannerPlugin = class extends import_obsidian7.Plugin {
       this.caldavClient.updateSettings(this.settings.feishu, this.settings.categoryKeywords);
     }
     this.startAutoSync();
+    await this.refreshView();
   }
   // Activate the Focus Planner view
   async activateView() {
@@ -3646,6 +3672,7 @@ var FocusPlannerPlugin = class extends import_obsidian7.Plugin {
     const weekStart = view.getCurrentWeekStart();
     const events = await this.getEventsForWeek(weekStart);
     view.setEvents(events);
+    await view.refreshTaskPanel();
   }
   // Sync calendar from Feishu (supports both CalDAV and Open API)
   async syncFeishuCalendar() {

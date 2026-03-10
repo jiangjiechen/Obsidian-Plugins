@@ -1,6 +1,7 @@
 import { App, PluginSettingTab, Setting, Modal, TextComponent } from 'obsidian';
 import FocusPlannerPlugin from './main';
 import { EventCategory, CATEGORY_LABELS } from './types';
+import { normalizeTaskSources } from './taskSourceConfig';
 
 // Modal for entering OAuth authorization code
 class AuthCodeModal extends Modal {
@@ -264,6 +265,22 @@ export class FocusPlannerSettingTab extends PluginSettingTab {
             await this.plugin.saveSettings();
           })
       );
+
+    new Setting(containerEl)
+      .setName('待办任务来源')
+      .setDesc('每行一个来源。文件夹请以 / 结尾，单个文件请填写完整 Markdown 路径。')
+      .addTextArea((text) => {
+        text
+          .setPlaceholder('PeriodicNotes/\nMeetings/')
+          .setValue(this.plugin.settings.taskSources.join('\n'))
+          .onChange(async (value) => {
+            this.plugin.settings.taskSources = normalizeTaskSources(value.split('\n'));
+            await this.plugin.saveSettings();
+          });
+
+        text.inputEl.rows = 4;
+        text.inputEl.style.width = '100%';
+      });
 
     // Pomodoro settings
     containerEl.createEl('h3', { text: '番茄钟设置' });

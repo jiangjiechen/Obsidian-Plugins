@@ -1,3 +1,4 @@
+import { DEFAULT_TASK_SOURCES } from './taskSourceConfig';
 // Event categories with their colors
 export enum EventCategory {
   FOCUS = 'focus',      // Green - 专注学习
@@ -98,6 +99,7 @@ export interface FocusPlannerSettings {
   feishu: FeishuSettings;
   dailyNotePath: string;
   weeklyNotePath: string;
+  taskSources: string[];
   pomodoroMinutes: number;
   categoryKeywords: Record<EventCategory, string[]>;
   showStatsPanel: boolean;
@@ -113,6 +115,7 @@ export const DEFAULT_SETTINGS: FocusPlannerSettings = {
   },
   dailyNotePath: 'PeriodicNotes/YYYY/Daily/MM/YYYY-MM-DD.md',
   weeklyNotePath: 'PeriodicNotes/YYYY/Weekly/YYYY-WXX.md',
+  taskSources: [...DEFAULT_TASK_SOURCES],
   pomodoroMinutes: 25,
   categoryKeywords: {
     [EventCategory.FOCUS]: ['专注', '学习', '阅读', '代码', 'demo', '论文', 'RL', 'nanoGPT'],

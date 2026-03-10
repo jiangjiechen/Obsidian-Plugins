@@ -1,5 +1,6 @@
 import { App, TFile, TFolder } from 'obsidian';
 import { EventCategory } from './types';
+import { formatTaskSourceSummary, normalizeTaskSources } from './taskSourceConfig';
 
 // Task status from checkbox
 export type TaskStatus = 'todo' | 'done' | 'in_progress' | 'cancelled' | 'deferred';
@@ -27,6 +28,7 @@ export interface TaskPanelData {
   today: ParsedTask[];
   thisWeek: ParsedTask[];
   overdue: ParsedTask[];
+  sourceSummary: string;
 }
 
 // Status character mapping
@@ -45,13 +47,11 @@ export class TaskParser {
 
   constructor(app: App, taskSources?: string[]) {
     this.app = app;
-    // Default task sources for LifeOS/Clobsidian vault structure
-    this.taskSources = taskSources || [
-      'PeriodicNotes/',   // Daily notes with 今日TODO
-      'Meetings/',        // Meeting notes with tasks
-      'Personal/',        // Personal tasks
-      'Clippings/',       // Clipped content with tasks
-    ];
+    this.taskSources = normalizeTaskSources(taskSources);
+  }
+
+  updateTaskSources(taskSources?: string[]): void {
+    this.taskSources = normalizeTaskSources(taskSources);
   }
 
   /**
@@ -288,6 +288,7 @@ export class TaskParser {
       today: todayTasks,
       thisWeek: thisWeekTasks,
       overdue: overdueTasks,
+      sourceSummary: formatTaskSourceSummary(this.taskSources),
     };
   }
 

@@ -1231,7 +1231,7 @@ export class FocusPlannerView extends ItemView {
       return;
     }
 
-    const { today, thisWeek, overdue } = this.taskPanelData;
+    const { today, thisWeek, overdue, sourceSummary } = this.taskPanelData;
 
     // Overdue section
     if (overdue.length > 0) {
@@ -1253,7 +1253,7 @@ export class FocusPlannerView extends ItemView {
       const emptyDiv = content.createDiv({ cls: 'task-panel-empty' });
       emptyDiv.createSpan({ text: '暂无待办任务' });
       emptyDiv.createEl('br');
-      emptyDiv.createSpan({ text: '任务来源: PeriodicNotes/, Meetings/' });
+      emptyDiv.createSpan({ text: sourceSummary });
     }
 
     // Footer hint (fixed at bottom)
