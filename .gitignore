@@ -4,6 +4,7 @@ node_modules/
 # Build artifacts
 # main.js  # Keep for Obsidian plugin releases
 main.js.map
+eisenhower-todos/main.js
 dist/
 build/
 *.zip
