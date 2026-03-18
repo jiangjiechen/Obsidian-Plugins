@@ -233,6 +233,9 @@ export default class EisenhowerTodosPlugin extends Plugin {
 class EisenhowerView extends ItemView {
   plugin: EisenhowerTodosPlugin;
   containerEl!: HTMLElement;
+  private filterTags: string[] = [];
+  private excludeTags: string[] = [];
+  private filterMode: "AND" | "OR" = "OR";
 
   constructor(leaf: WorkspaceLeaf, plugin: EisenhowerTodosPlugin) {
     super(leaf);
@@ -254,7 +257,8 @@ class EisenhowerView extends ItemView {
     if (this.plugin.settings.density === "compact") root.addClass("eis-compact");
     else root.removeClass("eis-compact");
 
-    const wrap = root.createDiv({ cls: "eisenhower-view" });
+    const outer = root.createDiv({ cls: "eisenhower-outer" });
+    const wrap = outer.createDiv({ cls: "eisenhower-view" });
 
     const panels: Record<
       Quadrant,
@@ -278,6 +282,21 @@ class EisenhowerView extends ItemView {
       if (a.created && b.created) return a.created.getTime() - b.created.getTime();
       return 0;
     });
+
+    // 筛选栏（需要全量 tasks 提取可用 tags）
+    this.renderFilterToolbar(outer, wrap, tasks);
+
+    // 应用 tag 筛选（包含 + 排除）
+    if (this.filterTags.length > 0 || this.excludeTags.length > 0) {
+      tasks = tasks.filter((t) => {
+        const taskTags = t.tags ?? [];
+        if (this.excludeTags.some((et) => taskTags.includes(et))) return false;
+        if (this.filterTags.length === 0) return true;
+        return this.filterMode === "AND"
+          ? this.filterTags.every((ft) => taskTags.includes(ft))
+          : this.filterTags.some((ft) => taskTags.includes(ft));
+      });
+    }
 
     const counters: Record<Quadrant, number> = { IU: 0, InU: 0, nIU: 0, nInU: 0 };
     for (const t of tasks) {
@@ -313,6 +332,165 @@ class EisenhowerView extends ItemView {
         }
       });
     }
+  }
+
+  private renderFilterToolbar(outer: HTMLElement, grid: HTMLElement, allTasks: TaskItem[]) {
+    // 收集所有可用 tag
+    const allTagSet = new Set<string>();
+    for (const t of allTasks) {
+      if (t.tags) t.tags.forEach((tag) => allTagSet.add(tag));
+    }
+    const allTagNames = Array.from(allTagSet).sort();
+
+    // 没有任何 tag 可用时不渲染筛选栏
+    if (allTagNames.length === 0) return;
+
+    const toolbar = outer.createDiv({ cls: "eis-filter-toolbar" });
+    outer.insertBefore(toolbar, grid);
+
+    // AND/OR 切换（≥2 个 tag 时显示）
+    if (this.filterTags.length >= 2) {
+      const modeBtn = toolbar.createEl("button", {
+        cls: "eis-filter-mode-btn",
+        text: this.filterMode,
+        attr: { title: this.filterMode === "AND" ? "所有标签都匹配" : "任一标签匹配" },
+      });
+      modeBtn.addEventListener("click", () => {
+        this.filterMode = this.filterMode === "AND" ? "OR" : "AND";
+        this.renderTasks();
+      });
+    }
+
+    // 已选 tag chips（包含）
+    for (const tag of this.filterTags) {
+      const chip = toolbar.createSpan({ cls: "chip chip-tag eis-filter-chip" });
+      chip.setAttribute("data-tag-color", String(getTagColorIndex(tag)));
+      const label = chip.createSpan({ text: `#${tag}`, attr: { title: "点击切换为排除" } });
+      chip.createSpan({ cls: "eis-chip-remove", text: "×" });
+      label.addEventListener("click", (e) => {
+        e.stopPropagation();
+        this.filterTags = this.filterTags.filter((ft) => ft !== tag);
+        this.excludeTags.push(tag);
+        this.renderTasks();
+      });
+      chip.querySelector(".eis-chip-remove")!.addEventListener("click", (e) => {
+        e.stopPropagation();
+        this.filterTags = this.filterTags.filter((ft) => ft !== tag);
+        this.renderTasks();
+      });
+    }
+
+    // 已选 tag chips（排除）
+    for (const tag of this.excludeTags) {
+      const chip = toolbar.createSpan({ cls: "chip chip-tag eis-filter-chip eis-filter-exclude" });
+      chip.setAttribute("data-tag-color", String(getTagColorIndex(tag)));
+      const label = chip.createSpan({ text: `#${tag}`, cls: "eis-exclude-label", attr: { title: "点击切换为包含" } });
+      chip.createSpan({ cls: "eis-chip-remove", text: "×" });
+      label.addEventListener("click", (e) => {
+        e.stopPropagation();
+        this.excludeTags = this.excludeTags.filter((et) => et !== tag);
+        this.filterTags.push(tag);
+        this.renderTasks();
+      });
+      chip.querySelector(".eis-chip-remove")!.addEventListener("click", (e) => {
+        e.stopPropagation();
+        this.excludeTags = this.excludeTags.filter((et) => et !== tag);
+        this.renderTasks();
+      });
+    }
+
+    // 清除全部
+    const totalFilters = this.filterTags.length + this.excludeTags.length;
+    if (totalFilters >= 2) {
+      const clearBtn = toolbar.createEl("button", {
+        cls: "eis-filter-clear",
+        text: "清除",
+        attr: { title: "清除所有筛选" },
+      });
+      clearBtn.addEventListener("click", () => {
+        this.filterTags = [];
+        this.excludeTags = [];
+        this.renderTasks();
+      });
+    }
+
+    // 输入框 + 下拉建议
+    const inputWrapper = toolbar.createDiv({ cls: "eis-filter-input-wrapper" });
+    const input = inputWrapper.createEl("input", {
+      cls: "eis-filter-input",
+      attr: { type: "text", placeholder: "筛选 tag…" },
+    });
+    const dropdown = inputWrapper.createDiv({ cls: "eis-filter-dropdown" });
+    dropdown.style.display = "none";
+
+    let selectedIdx = -1;
+    let currentMatches: string[] = [];
+
+    const updateSelection = () => {
+      const items = dropdown.querySelectorAll(".eis-filter-dropdown-item");
+      items.forEach((el, i) => {
+        el.toggleClass("is-selected", i === selectedIdx);
+      });
+    };
+
+    const showSuggestions = (query: string) => {
+      dropdown.empty();
+      selectedIdx = -1;
+      const q = query.toLowerCase();
+      currentMatches = allTagNames
+        .filter((tag) => !this.filterTags.includes(tag) && !this.excludeTags.includes(tag))
+        .filter((tag) => !q || tag.toLowerCase().includes(q));
+      if (currentMatches.length === 0 || !q) {
+        dropdown.style.display = "none";
+        return;
+      }
+      dropdown.style.display = "block";
+      for (const tag of currentMatches.slice(0, 10)) {
+        const item = dropdown.createDiv({ cls: "eis-filter-dropdown-item" });
+        const tagChip = item.createSpan({ cls: "chip chip-tag" });
+        tagChip.setText(`#${tag}`);
+        tagChip.setAttribute("data-tag-color", String(getTagColorIndex(tag)));
+        item.addEventListener("mousedown", (e) => {
+          e.preventDefault();
+          this.filterTags.push(tag);
+          this.renderTasks();
+        });
+      }
+    };
+
+    const selectTag = (tag: string) => {
+      this.filterTags.push(tag);
+      this.renderTasks();
+    };
+
+    input.addEventListener("input", () => showSuggestions(input.value));
+    input.addEventListener("focus", () => { if (input.value) showSuggestions(input.value); });
+    input.addEventListener("blur", () => {
+      setTimeout(() => { dropdown.style.display = "none"; }, 150);
+    });
+    input.addEventListener("keydown", (e) => {
+      const visible = dropdown.style.display !== "none";
+      const maxIdx = Math.min(currentMatches.length, 10) - 1;
+      if (e.key === "ArrowDown" && visible) {
+        e.preventDefault();
+        selectedIdx = selectedIdx < maxIdx ? selectedIdx + 1 : 0;
+        updateSelection();
+      } else if (e.key === "ArrowUp" && visible) {
+        e.preventDefault();
+        selectedIdx = selectedIdx > 0 ? selectedIdx - 1 : maxIdx;
+        updateSelection();
+      } else if (e.key === "Enter") {
+        e.preventDefault();
+        if (visible && selectedIdx >= 0 && selectedIdx <= maxIdx) {
+          selectTag(currentMatches[selectedIdx]);
+        } else if (visible && currentMatches.length > 0) {
+          selectTag(currentMatches[0]);
+        }
+      } else if (e.key === "Escape") {
+        dropdown.style.display = "none";
+        input.blur();
+      }
+    });
   }
 
   private createPanel(container: HTMLElement, title: string, cls: string) {
@@ -554,7 +732,7 @@ function extractCollaborators(raw: string): string[] {
 }
 
 function extractTags(raw: string, importantTag: string, urgentTag: string): string[] {
-  const re = /#([a-zA-Z0-9_\u4e00-\u9fff]+)/g;
+  const re = /#([a-zA-Z0-9_\-\u4e00-\u9fff]+)/g;
   const tags: string[] = [];
   let match;
   while ((match = re.exec(raw)) !== null) {
@@ -606,7 +784,7 @@ function cleanupTaskText(raw: string, keys: { dueKey: string; startKey: string; 
   cleaned = cleaned
     .replace(new RegExp(`${escapeReg(keys.importantTag)}\\b`, "g"), "")
     .replace(new RegExp(`${escapeReg(keys.urgentTag)}\\b`, "g"), "")
-    .replace(/#([a-zA-Z0-9_\u4e00-\u9fff]+)/g, "")
+    .replace(/#([a-zA-Z0-9_\-\u4e00-\u9fff]+)/g, "")
     .replace(/@[a-zA-Z0-9_\u4e00-\u9fff]+/g, "")
     .replace(/\s{2,}/g, " ")
     .trim();

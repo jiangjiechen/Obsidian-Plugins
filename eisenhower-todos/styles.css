@@ -1,7 +1,15 @@
-/* ===== 布局：四象限容器 ===== */
-.eisenhower-view {
+/* ===== 布局：外层容器 + 四象限 ===== */
+.eisenhower-outer {
+  display: flex;
+  flex-direction: column;
   height: 100vh;
   max-height: 100vh;
+  overflow: hidden;
+}
+
+.eisenhower-view {
+  flex: 1;
+  min-height: 0;
   display: grid;
   grid-template-columns: repeat(2, 1fr);
   grid-template-rows: repeat(2, minmax(200px, 1fr));
@@ -362,4 +370,158 @@
 /* 滚动条容器悬浮时显示 */
 .eisenhower-panel:hover .eisenhower-list::-webkit-scrollbar-thumb {
   background: color-mix(in oklab, var(--background-modifier-border) 80%, var(--text-muted));
+}
+
+/* ===== Tag 筛选栏 ===== */
+.eis-filter-toolbar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--background-modifier-border);
+  background: var(--background-secondary);
+  flex-shrink: 0;
+}
+
+.eis-filter-mode-btn {
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 6px;
+  border: 1px solid var(--background-modifier-border);
+  background: var(--background-modifier-hover);
+  cursor: pointer;
+  font-weight: 600;
+  min-width: 32px;
+  text-align: center;
+  transition: background .15s ease, border-color .15s ease, transform .1s ease;
+  color: var(--text-muted);
+  letter-spacing: .3px;
+}
+.eis-filter-mode-btn:hover {
+  border-color: var(--interactive-accent);
+  color: var(--text-normal);
+}
+.eis-filter-mode-btn:active {
+  transform: scale(.95);
+}
+
+.eis-filter-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  cursor: pointer;
+  transition: opacity .15s ease, filter .15s ease;
+}
+.eis-filter-chip:hover {
+  filter: brightness(1.1);
+}
+.eis-filter-chip .eis-chip-remove {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+  font-size: 10px;
+  line-height: 1;
+  opacity: 0.5;
+  border-radius: 50%;
+  transition: opacity .15s ease, background .15s ease;
+}
+.eis-filter-chip:hover .eis-chip-remove {
+  opacity: 1;
+  background: rgba(0,0,0,.1);
+}
+
+/* 排除模式 chip */
+.eis-filter-exclude {
+  border-style: dashed;
+  opacity: .7;
+}
+.eis-filter-exclude .eis-exclude-label {
+  text-decoration: line-through;
+}
+
+.eis-filter-clear {
+  font-size: 11px;
+  padding: 2px 6px;
+  border: none;
+  background: none;
+  cursor: pointer;
+  color: var(--text-muted);
+  transition: color .15s ease;
+}
+.eis-filter-clear:hover {
+  color: var(--text-normal);
+}
+
+.eis-filter-input-wrapper {
+  position: relative;
+}
+.eis-filter-input {
+  font-size: 12px;
+  padding: 3px 8px;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 6px;
+  background: var(--background-primary);
+  color: var(--text-normal);
+  outline: none;
+  min-width: 100px;
+  max-width: 180px;
+  transition: border-color .15s ease, box-shadow .15s ease;
+}
+.eis-filter-input:focus {
+  border-color: var(--interactive-accent);
+  box-shadow: 0 0 0 2px color-mix(in oklab, var(--interactive-accent) 15%, transparent);
+}
+.eis-filter-input::placeholder {
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
+.eis-filter-dropdown {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  z-index: 100;
+  min-width: 160px;
+  max-height: 200px;
+  overflow-y: auto;
+  background: var(--background-primary);
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 8px;
+  box-shadow: 0 6px 20px rgba(0,0,0,.12);
+  margin-top: 4px;
+  scrollbar-width: thin;
+  scrollbar-color: var(--background-modifier-border) transparent;
+}
+.eis-filter-dropdown-item {
+  padding: 6px 10px;
+  cursor: pointer;
+  font-size: 12px;
+  transition: background .1s ease;
+}
+.eis-filter-dropdown-item:hover,
+.eis-filter-dropdown-item.is-selected {
+  background: var(--background-modifier-hover);
+}
+.eis-filter-dropdown-item:first-child {
+  border-radius: 8px 8px 0 0;
+}
+.eis-filter-dropdown-item:last-child {
+  border-radius: 0 0 8px 8px;
+}
+.eis-filter-dropdown-item:only-child {
+  border-radius: 8px;
+}
+
+/* 紧凑模式适配 */
+.eis-compact .eis-filter-toolbar {
+  padding: 6px 10px;
+  gap: 4px;
+}
+.eis-compact .eis-filter-input {
+  padding: 2px 6px;
+  font-size: 11px;
+  min-width: 80px;
 }
