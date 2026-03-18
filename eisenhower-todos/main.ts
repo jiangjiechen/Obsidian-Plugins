@@ -235,6 +235,8 @@ class EisenhowerView extends ItemView {
   containerEl!: HTMLElement;
   private filterTags: string[] = [];
   private excludeTags: string[] = [];
+  private filterCollabs: string[] = [];
+  private excludeCollabs: string[] = [];
   private filterMode: "AND" | "OR" = "OR";
 
   constructor(leaf: WorkspaceLeaf, plugin: EisenhowerTodosPlugin) {
@@ -286,15 +288,28 @@ class EisenhowerView extends ItemView {
     // 筛选栏（需要全量 tasks 提取可用 tags）
     this.renderFilterToolbar(outer, wrap, tasks);
 
-    // 应用 tag 筛选（包含 + 排除）
-    if (this.filterTags.length > 0 || this.excludeTags.length > 0) {
+    // 应用筛选（tag + collaborator，包含 + 排除）
+    const hasFilter = this.filterTags.length > 0 || this.excludeTags.length > 0
+      || this.filterCollabs.length > 0 || this.excludeCollabs.length > 0;
+    if (hasFilter) {
       tasks = tasks.filter((t) => {
         const taskTags = t.tags ?? [];
+        const taskCollabs = t.collaborators ?? [];
+        // 排除优先
         if (this.excludeTags.some((et) => taskTags.includes(et))) return false;
-        if (this.filterTags.length === 0) return true;
-        return this.filterMode === "AND"
-          ? this.filterTags.every((ft) => taskTags.includes(ft))
-          : this.filterTags.some((ft) => taskTags.includes(ft));
+        if (this.excludeCollabs.some((ec) => taskCollabs.includes(ec))) return false;
+        // 包含：tag 和 collab 各自独立判断，都要通过
+        let tagPass = true;
+        if (this.filterTags.length > 0) {
+          tagPass = this.filterMode === "AND"
+            ? this.filterTags.every((ft) => taskTags.includes(ft))
+            : this.filterTags.some((ft) => taskTags.includes(ft));
+        }
+        let collabPass = true;
+        if (this.filterCollabs.length > 0) {
+          collabPass = this.filterCollabs.some((fc) => taskCollabs.includes(fc));
+        }
+        return tagPass && collabPass;
       });
     }
 
@@ -335,20 +350,23 @@ class EisenhowerView extends ItemView {
   }
 
   private renderFilterToolbar(outer: HTMLElement, grid: HTMLElement, allTasks: TaskItem[]) {
-    // 收集所有可用 tag
+    // 收集所有可用 tag 和 collaborator
     const allTagSet = new Set<string>();
+    const allCollabSet = new Set<string>();
     for (const t of allTasks) {
       if (t.tags) t.tags.forEach((tag) => allTagSet.add(tag));
+      if (t.collaborators) t.collaborators.forEach((c) => allCollabSet.add(c));
     }
     const allTagNames = Array.from(allTagSet).sort();
+    const allCollabNames = Array.from(allCollabSet).sort();
 
-    // 没有任何 tag 可用时不渲染筛选栏
-    if (allTagNames.length === 0) return;
+    // 没有任何 tag/collaborator 可用时不渲染筛选栏
+    if (allTagNames.length === 0 && allCollabNames.length === 0) return;
 
     const toolbar = outer.createDiv({ cls: "eis-filter-toolbar" });
     outer.insertBefore(toolbar, grid);
 
-    // AND/OR 切换（≥2 个 tag 时显示）
+    // AND/OR 切换（≥2 个包含 tag 时显示）
     if (this.filterTags.length >= 2) {
       const modeBtn = toolbar.createEl("button", {
         cls: "eis-filter-mode-btn",
@@ -361,46 +379,65 @@ class EisenhowerView extends ItemView {
       });
     }
 
-    // 已选 tag chips（包含）
-    for (const tag of this.filterTags) {
-      const chip = toolbar.createSpan({ cls: "chip chip-tag eis-filter-chip" });
-      chip.setAttribute("data-tag-color", String(getTagColorIndex(tag)));
-      const label = chip.createSpan({ text: `#${tag}`, attr: { title: "点击切换为排除" } });
+    // 渲染 filter chip 的通用函数
+    const renderChip = (
+      name: string, prefix: string, chipCls: string,
+      includeList: string[], excludeList: string[], isExclude: boolean,
+      colorAttr?: { key: string; value: string }
+    ) => {
+      const cls = `chip ${chipCls} eis-filter-chip${isExclude ? " eis-filter-exclude" : ""}`;
+      const chip = toolbar.createSpan({ cls });
+      if (colorAttr) chip.setAttribute(colorAttr.key, colorAttr.value);
+      const labelCls = isExclude ? "eis-exclude-label" : undefined;
+      const label = chip.createSpan({
+        text: `${prefix}${name}`,
+        cls: labelCls,
+        attr: { title: isExclude ? "点击切换为包含" : "点击切换为排除" },
+      });
       chip.createSpan({ cls: "eis-chip-remove", text: "×" });
       label.addEventListener("click", (e) => {
         e.stopPropagation();
-        this.filterTags = this.filterTags.filter((ft) => ft !== tag);
-        this.excludeTags.push(tag);
+        if (isExclude) {
+          const idx = excludeList.indexOf(name);
+          if (idx >= 0) excludeList.splice(idx, 1);
+          includeList.push(name);
+        } else {
+          const idx = includeList.indexOf(name);
+          if (idx >= 0) includeList.splice(idx, 1);
+          excludeList.push(name);
+        }
         this.renderTasks();
       });
       chip.querySelector(".eis-chip-remove")!.addEventListener("click", (e) => {
         e.stopPropagation();
-        this.filterTags = this.filterTags.filter((ft) => ft !== tag);
+        const list = isExclude ? excludeList : includeList;
+        const idx = list.indexOf(name);
+        if (idx >= 0) list.splice(idx, 1);
         this.renderTasks();
       });
+    };
+
+    // Tag chips
+    for (const tag of this.filterTags) {
+      renderChip(tag, "#", "chip-tag", this.filterTags, this.excludeTags, false,
+        { key: "data-tag-color", value: String(getTagColorIndex(tag)) });
+    }
+    for (const tag of this.excludeTags) {
+      renderChip(tag, "#", "chip-tag", this.filterTags, this.excludeTags, true,
+        { key: "data-tag-color", value: String(getTagColorIndex(tag)) });
     }
 
-    // 已选 tag chips（排除）
-    for (const tag of this.excludeTags) {
-      const chip = toolbar.createSpan({ cls: "chip chip-tag eis-filter-chip eis-filter-exclude" });
-      chip.setAttribute("data-tag-color", String(getTagColorIndex(tag)));
-      const label = chip.createSpan({ text: `#${tag}`, cls: "eis-exclude-label", attr: { title: "点击切换为包含" } });
-      chip.createSpan({ cls: "eis-chip-remove", text: "×" });
-      label.addEventListener("click", (e) => {
-        e.stopPropagation();
-        this.excludeTags = this.excludeTags.filter((et) => et !== tag);
-        this.filterTags.push(tag);
-        this.renderTasks();
-      });
-      chip.querySelector(".eis-chip-remove")!.addEventListener("click", (e) => {
-        e.stopPropagation();
-        this.excludeTags = this.excludeTags.filter((et) => et !== tag);
-        this.renderTasks();
-      });
+    // Collaborator chips
+    for (const c of this.filterCollabs) {
+      renderChip(c, "@", "chip-collaborator", this.filterCollabs, this.excludeCollabs, false);
+    }
+    for (const c of this.excludeCollabs) {
+      renderChip(c, "@", "chip-collaborator", this.filterCollabs, this.excludeCollabs, true);
     }
 
     // 清除全部
-    const totalFilters = this.filterTags.length + this.excludeTags.length;
+    const totalFilters = this.filterTags.length + this.excludeTags.length
+      + this.filterCollabs.length + this.excludeCollabs.length;
     if (totalFilters >= 2) {
       const clearBtn = toolbar.createEl("button", {
         cls: "eis-filter-clear",
@@ -410,21 +447,24 @@ class EisenhowerView extends ItemView {
       clearBtn.addEventListener("click", () => {
         this.filterTags = [];
         this.excludeTags = [];
+        this.filterCollabs = [];
+        this.excludeCollabs = [];
         this.renderTasks();
       });
     }
 
-    // 输入框 + 下拉建议
+    // 输入框 + 统一下拉（tag + collaborator 混合搜索）
     const inputWrapper = toolbar.createDiv({ cls: "eis-filter-input-wrapper" });
     const input = inputWrapper.createEl("input", {
       cls: "eis-filter-input",
-      attr: { type: "text", placeholder: "筛选 tag…" },
+      attr: { type: "text", placeholder: "筛选 #tag / @人…" },
     });
     const dropdown = inputWrapper.createDiv({ cls: "eis-filter-dropdown" });
     dropdown.style.display = "none";
 
+    type SuggestionItem = { type: "tag" | "collab"; name: string };
     let selectedIdx = -1;
-    let currentMatches: string[] = [];
+    let currentMatches: SuggestionItem[] = [];
 
     const updateSelection = () => {
       const items = dropdown.querySelectorAll(".eis-filter-dropdown-item");
@@ -437,29 +477,49 @@ class EisenhowerView extends ItemView {
       dropdown.empty();
       selectedIdx = -1;
       const q = query.toLowerCase();
-      currentMatches = allTagNames
-        .filter((tag) => !this.filterTags.includes(tag) && !this.excludeTags.includes(tag))
-        .filter((tag) => !q || tag.toLowerCase().includes(q));
+      currentMatches = [];
+
+      // tag 候选
+      const tagMatches = allTagNames
+        .filter((t) => !this.filterTags.includes(t) && !this.excludeTags.includes(t))
+        .filter((t) => !q || t.toLowerCase().includes(q))
+        .map((name): SuggestionItem => ({ type: "tag", name }));
+
+      // collaborator 候选
+      const collabMatches = allCollabNames
+        .filter((c) => !this.filterCollabs.includes(c) && !this.excludeCollabs.includes(c))
+        .filter((c) => !q || c.toLowerCase().includes(q))
+        .map((name): SuggestionItem => ({ type: "collab", name }));
+
+      currentMatches = [...tagMatches, ...collabMatches].slice(0, 10);
+
       if (currentMatches.length === 0 || !q) {
         dropdown.style.display = "none";
         return;
       }
       dropdown.style.display = "block";
-      for (const tag of currentMatches.slice(0, 10)) {
+      for (const s of currentMatches) {
         const item = dropdown.createDiv({ cls: "eis-filter-dropdown-item" });
-        const tagChip = item.createSpan({ cls: "chip chip-tag" });
-        tagChip.setText(`#${tag}`);
-        tagChip.setAttribute("data-tag-color", String(getTagColorIndex(tag)));
+        if (s.type === "tag") {
+          const tagChip = item.createSpan({ cls: "chip chip-tag" });
+          tagChip.setText(`#${s.name}`);
+          tagChip.setAttribute("data-tag-color", String(getTagColorIndex(s.name)));
+        } else {
+          const collabChip = item.createSpan({ cls: "chip chip-collaborator" });
+          collabChip.setText(`@${s.name}`);
+        }
         item.addEventListener("mousedown", (e) => {
           e.preventDefault();
-          this.filterTags.push(tag);
+          if (s.type === "tag") this.filterTags.push(s.name);
+          else this.filterCollabs.push(s.name);
           this.renderTasks();
         });
       }
     };
 
-    const selectTag = (tag: string) => {
-      this.filterTags.push(tag);
+    const selectItem = (s: SuggestionItem) => {
+      if (s.type === "tag") this.filterTags.push(s.name);
+      else this.filterCollabs.push(s.name);
       this.renderTasks();
     };
 
@@ -470,7 +530,7 @@ class EisenhowerView extends ItemView {
     });
     input.addEventListener("keydown", (e) => {
       const visible = dropdown.style.display !== "none";
-      const maxIdx = Math.min(currentMatches.length, 10) - 1;
+      const maxIdx = currentMatches.length - 1;
       if (e.key === "ArrowDown" && visible) {
         e.preventDefault();
         selectedIdx = selectedIdx < maxIdx ? selectedIdx + 1 : 0;
@@ -482,9 +542,9 @@ class EisenhowerView extends ItemView {
       } else if (e.key === "Enter") {
         e.preventDefault();
         if (visible && selectedIdx >= 0 && selectedIdx <= maxIdx) {
-          selectTag(currentMatches[selectedIdx]);
+          selectItem(currentMatches[selectedIdx]);
         } else if (visible && currentMatches.length > 0) {
-          selectTag(currentMatches[0]);
+          selectItem(currentMatches[0]);
         }
       } else if (e.key === "Escape") {
         dropdown.style.display = "none";
