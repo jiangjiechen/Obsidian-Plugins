@@ -1,5 +1,10 @@
 import { requestUrl } from 'obsidian';
 import { CalendarEvent, EventCategory, FeishuSettings } from './types';
+import {
+  collectRecurringOverrideKeys,
+  createOccurrenceKey,
+  shouldRenderRecurringException,
+} from './caldavRecurringOverrides';
 
 const CALDAV_SERVER = 'https://caldav.feishu.cn';
 
@@ -648,6 +653,7 @@ export class CalDavClient {
       rrule: string | null;
       recurrenceId: string | null; // RECURRENCE-ID marks an exception/modified occurrence
       status: string | null;
+      exdates: string[];
     };
 
     const allVEvents: VEventInfo[] = [];
@@ -662,6 +668,7 @@ export class CalDavClient {
         rrule: this.extractIcsProperty(vevent, 'RRULE'),
         recurrenceId: this.extractIcsProperty(vevent, 'RECURRENCE-ID'),
         status: this.extractIcsProperty(vevent, 'STATUS'),
+        exdates: this.extractIcsProperties(vevent, 'EXDATE'),
       });
     }
 
@@ -676,18 +683,17 @@ export class CalDavClient {
       }
     }
 
-    // 建立例外实例的"title + 日期"集合，用于过滤掉父周期事件展开的同日同名实例
-    const exceptionKeys = new Set<string>();
+    const skippedOccurrenceKeys = new Set(
+      collectRecurringOverrideKeys(allVEvents, (value) => this.parseIcsDateTime(value))
+    );
     const events: CalendarEvent[] = [];
 
     for (const v of exceptionEvents) {
-      if (v.status?.toUpperCase() === 'CANCELLED') continue;
+      if (!shouldRenderRecurringException(v)) continue;
       if (!v.dtstart) continue;
       const start = this.parseIcsDateTime(v.dtstart);
       const end = v.dtend ? this.parseIcsDateTime(v.dtend) : new Date(start.getTime() + 3600000);
       if (end >= queryStart && start <= queryEnd) {
-        const dayKey = `${v.summary}|${start.toISOString().split('T')[0]}`;
-        exceptionKeys.add(dayKey);
         events.push({
           id: `caldav-${v.uid || Date.now()}`,
           title: v.summary,
@@ -700,7 +706,7 @@ export class CalDavClient {
       }
     }
 
-    // 处理普通事件和周期父事件（跳过被例外实例覆盖的日期）
+    // 处理普通事件和周期父事件（跳过被例外实例或 EXDATE 覆盖的实例）
     for (const v of normalEvents) {
       if (v.status?.toUpperCase() === 'CANCELLED') continue;
       if (!v.dtstart) {
@@ -734,8 +740,8 @@ export class CalDavClient {
       const instances = this.expandRecurrence(start, duration, v.rrule, queryStart, queryEnd);
       for (let i = 0; i < instances.length; i++) {
         const instanceStart = instances[i];
-        const dayKey = `${title}|${instanceStart.toISOString().split('T')[0]}`;
-        if (exceptionKeys.has(dayKey)) {
+        const occurrenceKey = createOccurrenceKey(v.uid, instanceStart);
+        if (skippedOccurrenceKeys.has(occurrenceKey)) {
           console.log('[Focus Planner] Skipping recurring instance overridden by exception:', title, instanceStart);
           continue;
         }
@@ -760,6 +766,11 @@ export class CalDavClient {
     const regex = new RegExp(`^${property}(?:;[^:]*)?:(.*)$`, 'im');
     const match = vevent.match(regex);
     return match ? match[1].trim() : null;
+  }
+
+  private extractIcsProperties(vevent: string, property: string): string[] {
+    const regex = new RegExp(`^${property}(?:;[^:]*)?:(.*)$`, 'gim');
+    return Array.from(vevent.matchAll(regex), (match) => match[1].trim());
   }
 
   // Parse iCalendar date/time format

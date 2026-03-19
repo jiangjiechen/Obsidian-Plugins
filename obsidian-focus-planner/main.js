@@ -517,6 +517,35 @@ var FeishuApi = class {
 
 // src/caldavClient.ts
 var import_obsidian2 = require("obsidian");
+
+// src/caldavRecurringOverrides.ts
+var MISSING_UID_KEY = "__missing_uid__";
+function createOccurrenceKey(uid, occurrenceStart) {
+  return `${uid || MISSING_UID_KEY}|${occurrenceStart.toISOString()}`;
+}
+function shouldRenderRecurringException(source) {
+  var _a;
+  return Boolean(source.recurrenceId) && ((_a = source.status) == null ? void 0 : _a.toUpperCase()) !== "CANCELLED";
+}
+function collectRecurringOverrideKeys(sources, parseDateTime) {
+  const keys = /* @__PURE__ */ new Set();
+  for (const source of sources) {
+    if (source.recurrenceId) {
+      keys.add(createOccurrenceKey(source.uid, parseDateTime(source.recurrenceId)));
+    }
+    for (const exdate of source.exdates) {
+      for (const value of exdate.split(",")) {
+        const trimmedValue = value.trim();
+        if (!trimmedValue)
+          continue;
+        keys.add(createOccurrenceKey(source.uid, parseDateTime(trimmedValue)));
+      }
+    }
+  }
+  return Array.from(keys);
+}
+
+// src/caldavClient.ts
 var CALDAV_SERVER = "https://caldav.feishu.cn";
 var CalDavClient = class {
   constructor(settings, categoryKeywords) {
@@ -956,7 +985,7 @@ var CalDavClient = class {
   }
   // Parse iCalendar (.ics) format
   parseICalendar(icsData, queryStart, queryEnd) {
-    var _a, _b;
+    var _a;
     icsData = icsData.replace(/\r\n[ \t]/g, "").replace(/\n[ \t]/g, "");
     const allVEvents = [];
     const veventMatches = icsData.matchAll(/BEGIN:VEVENT[\s\S]*?END:VEVENT/g);
@@ -969,7 +998,8 @@ var CalDavClient = class {
         dtend: this.extractIcsProperty(vevent, "DTEND"),
         rrule: this.extractIcsProperty(vevent, "RRULE"),
         recurrenceId: this.extractIcsProperty(vevent, "RECURRENCE-ID"),
-        status: this.extractIcsProperty(vevent, "STATUS")
+        status: this.extractIcsProperty(vevent, "STATUS"),
+        exdates: this.extractIcsProperties(vevent, "EXDATE")
       });
     }
     const exceptionEvents = [];
@@ -981,18 +1011,18 @@ var CalDavClient = class {
         normalEvents.push(v);
       }
     }
-    const exceptionKeys = /* @__PURE__ */ new Set();
+    const skippedOccurrenceKeys = new Set(
+      collectRecurringOverrideKeys(allVEvents, (value) => this.parseIcsDateTime(value))
+    );
     const events = [];
     for (const v of exceptionEvents) {
-      if (((_a = v.status) == null ? void 0 : _a.toUpperCase()) === "CANCELLED")
+      if (!shouldRenderRecurringException(v))
         continue;
       if (!v.dtstart)
         continue;
       const start = this.parseIcsDateTime(v.dtstart);
       const end = v.dtend ? this.parseIcsDateTime(v.dtend) : new Date(start.getTime() + 36e5);
       if (end >= queryStart && start <= queryEnd) {
-        const dayKey = `${v.summary}|${start.toISOString().split("T")[0]}`;
-        exceptionKeys.add(dayKey);
         events.push({
           id: `caldav-${v.uid || Date.now()}`,
           title: v.summary,
@@ -1005,7 +1035,7 @@ var CalDavClient = class {
       }
     }
     for (const v of normalEvents) {
-      if (((_b = v.status) == null ? void 0 : _b.toUpperCase()) === "CANCELLED")
+      if (((_a = v.status) == null ? void 0 : _a.toUpperCase()) === "CANCELLED")
         continue;
       if (!v.dtstart) {
         console.log("[Focus Planner] Skipping event without DTSTART:", v.summary);
@@ -1033,8 +1063,8 @@ var CalDavClient = class {
       const instances = this.expandRecurrence(start, duration, v.rrule, queryStart, queryEnd);
       for (let i = 0; i < instances.length; i++) {
         const instanceStart = instances[i];
-        const dayKey = `${title}|${instanceStart.toISOString().split("T")[0]}`;
-        if (exceptionKeys.has(dayKey)) {
+        const occurrenceKey = createOccurrenceKey(v.uid, instanceStart);
+        if (skippedOccurrenceKeys.has(occurrenceKey)) {
           console.log("[Focus Planner] Skipping recurring instance overridden by exception:", title, instanceStart);
           continue;
         }
@@ -1056,6 +1086,10 @@ var CalDavClient = class {
     const regex = new RegExp(`^${property}(?:;[^:]*)?:(.*)$`, "im");
     const match = vevent.match(regex);
     return match ? match[1].trim() : null;
+  }
+  extractIcsProperties(vevent, property) {
+    const regex = new RegExp(`^${property}(?:;[^:]*)?:(.*)$`, "gim");
+    return Array.from(vevent.matchAll(regex), (match) => match[1].trim());
   }
   // Parse iCalendar date/time format
   parseIcsDateTime(dtString) {
@@ -1803,6 +1837,32 @@ var StatsManager = class {
 
 // src/calendarView.ts
 var import_obsidian4 = require("obsidian");
+
+// src/taskPanelState.ts
+function getTaskPanelDisplayState(isExpanded) {
+  if (isExpanded) {
+    return {
+      isExpanded: true,
+      isCollapsed: false,
+      shouldShowContent: true,
+      toggleIcon: "\u203A",
+      toggleLabel: "\u6536\u8D77\u4EFB\u52A1",
+      toggleTitle: "\u6536\u8D77\u5F85\u529E\u4EFB\u52A1\u9762\u677F",
+      ariaExpanded: "true"
+    };
+  }
+  return {
+    isExpanded: false,
+    isCollapsed: true,
+    shouldShowContent: false,
+    toggleIcon: "\u2039",
+    toggleLabel: "\u5C55\u5F00\u4EFB\u52A1",
+    toggleTitle: "\u5C55\u5F00\u5F85\u529E\u4EFB\u52A1\u9762\u677F",
+    ariaExpanded: "false"
+  };
+}
+
+// src/calendarView.ts
 var VIEW_TYPE_FOCUS_PLANNER = "focus-planner-view";
 var START_HOUR = 7;
 var END_HOUR = 23;
@@ -1932,7 +1992,9 @@ var FocusPlannerView = class extends import_obsidian4.ItemView {
     this.dayColumnsContainer = null;
     // Task panel
     this.taskPanel = null;
+    this.taskPanelToggle = null;
     this.taskPanelData = null;
+    this.isTaskPanelExpanded = false;
     // Callbacks
     this.onSyncFeishu = null;
     this.onEventClick = null;
@@ -2055,10 +2117,11 @@ var FocusPlannerView = class extends import_obsidian4.ItemView {
     this.createHeader(header);
     const mainContent = container.createDiv({ cls: "focus-planner-main" });
     this.calendarContainer = mainContent.createDiv({ cls: "focus-planner-calendar" });
-    this.taskPanel = mainContent.createDiv({ cls: "focus-planner-task-panel" });
+    const taskPanelToggleRail = mainContent.createDiv({ cls: "task-panel-toggle-rail" });
+    this.createTaskPanelToggle(taskPanelToggleRail);
+    this.taskPanel = mainContent.createDiv({ cls: "focus-planner-task-panel is-collapsed" });
     this.summaryContainer = container.createDiv({ cls: "focus-planner-summary" });
     await this.loadEventsForCurrentWeek();
-    await this.loadTasksForPanel();
     this.renderCalendar();
     this.renderTaskPanel();
     this.updateSummaryBar();
@@ -2109,6 +2172,25 @@ var FocusPlannerView = class extends import_obsidian4.ItemView {
     const endDay = weekEnd.getDate();
     const year = this.currentWeekStart.getFullYear();
     element.textContent = `${year}\u5E74 ${startMonth}/${startDay} - ${endMonth}/${endDay}`;
+  }
+  createTaskPanelToggle(container) {
+    this.taskPanelToggle = container.createEl("button", {
+      cls: "task-panel-toggle-btn",
+      attr: { type: "button" }
+    });
+    this.taskPanelToggle.addEventListener("click", () => {
+      void this.toggleTaskPanel();
+    });
+  }
+  async toggleTaskPanel() {
+    this.isTaskPanelExpanded = !this.isTaskPanelExpanded;
+    this.renderTaskPanel();
+    if (this.isTaskPanelExpanded && !this.taskPanelData) {
+      await this.loadTasksForPanel();
+      if (this.isTaskPanelExpanded) {
+        this.renderTaskPanel();
+      }
+    }
   }
   async navigateWeek(offset) {
     this.currentWeekStart.setDate(this.currentWeekStart.getDate() + offset * 7);
@@ -2647,9 +2729,21 @@ var FocusPlannerView = class extends import_obsidian4.ItemView {
   }
   // Render the task panel
   renderTaskPanel() {
-    if (!this.taskPanel)
+    if (!this.taskPanel || !this.taskPanelToggle)
       return;
     this.taskPanel.empty();
+    const displayState = getTaskPanelDisplayState(this.isTaskPanelExpanded);
+    this.taskPanel.classList.toggle("is-collapsed", displayState.isCollapsed);
+    this.taskPanel.classList.toggle("is-expanded", displayState.isExpanded);
+    this.taskPanelToggle.empty();
+    this.taskPanelToggle.setAttribute("aria-expanded", displayState.ariaExpanded);
+    this.taskPanelToggle.setAttribute("aria-label", displayState.toggleTitle);
+    this.taskPanelToggle.setAttribute("title", displayState.toggleTitle);
+    this.taskPanelToggle.createSpan({ cls: "task-panel-toggle-icon", text: displayState.toggleIcon });
+    this.taskPanelToggle.createSpan({ cls: "task-panel-toggle-label", text: displayState.toggleLabel });
+    if (!displayState.shouldShowContent) {
+      return;
+    }
     const header = this.taskPanel.createDiv({ cls: "task-panel-header" });
     header.createSpan({ text: "\u{1F4CB} \u5F85\u529E\u4EFB\u52A1" });
     const refreshBtn = header.createEl("button", { cls: "task-panel-refresh", text: "\u21BB" });
@@ -2808,6 +2902,10 @@ var FocusPlannerView = class extends import_obsidian4.ItemView {
   }
   // Refresh task panel (can be called externally)
   async refreshTaskPanel() {
+    if (!this.isTaskPanelExpanded && !this.taskPanelData) {
+      this.renderTaskPanel();
+      return;
+    }
     await this.loadTasksForPanel();
     this.renderTaskPanel();
   }

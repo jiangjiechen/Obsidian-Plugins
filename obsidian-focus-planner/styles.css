@@ -643,6 +643,7 @@ body.focus-planner-dragging * {
   flex: 1;
   overflow: hidden;
   gap: 0;
+  position: relative;
 }
 
 .focus-planner-calendar {
@@ -652,15 +653,69 @@ body.focus-planner-dragging * {
 
 /* ========== TASK PANEL ========== */
 
+.task-panel-toggle-rail {
+  position: relative;
+  width: 0;
+  flex: 0 0 0;
+  z-index: 2;
+}
+
+.task-panel-toggle-btn {
+  position: absolute;
+  top: 12px;
+  left: 0;
+  transform: translateX(-50%);
+  width: 34px;
+  height: 60px;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 10px;
+  background: var(--background-primary);
+  color: var(--text-muted);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  transition: background-color 0.15s ease, color 0.15s ease;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+}
+
+.task-panel-toggle-btn:hover {
+  background: var(--background-modifier-hover);
+  color: var(--text-normal);
+}
+
+.task-panel-toggle-icon {
+  font-size: 1.25em;
+  line-height: 1;
+}
+
+.task-panel-toggle-label {
+  display: none;
+}
+
 .focus-planner-task-panel {
   width: 260px;
-  min-width: 200px;
+  flex: 0 0 260px;
+  min-width: 0;
   max-width: 320px;
   border-left: 1px solid var(--background-modifier-border);
   background: var(--background-secondary);
   display: flex;
   flex-direction: column;
   overflow: hidden;
+}
+
+.focus-planner-task-panel.is-collapsed {
+  width: 0;
+  flex-basis: 0;
+  max-width: 0;
+  border-left: none;
+}
+
+.focus-planner-task-panel.is-expanded {
+  width: 260px;
+  flex-basis: 260px;
 }
 
 .task-panel-header {
@@ -859,12 +914,17 @@ body.focus-planner-dragging * {
 
 /* Responsive - Hide Task Panel on Small Screens */
 @media (max-width: 900px) {
+  .task-panel-toggle-rail,
   .focus-planner-task-panel {
     display: none;
   }
 }
 
 /* Dark Theme Adjustments */
+.theme-dark .task-panel-toggle-btn {
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+}
+
 .theme-dark .task-card {
   background: var(--background-primary-alt);
 }

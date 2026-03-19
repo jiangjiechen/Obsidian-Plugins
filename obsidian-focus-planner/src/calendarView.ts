@@ -7,6 +7,7 @@ import {
   WeeklyStats,
 } from './types';
 import { ParsedTask, TaskPanelData } from './taskParser';
+import { getTaskPanelDisplayState } from './taskPanelState';
 
 export const VIEW_TYPE_FOCUS_PLANNER = 'focus-planner-view';
 
@@ -211,7 +212,9 @@ export class FocusPlannerView extends ItemView {
 
   // Task panel
   private taskPanel: HTMLElement | null = null;
+  private taskPanelToggle: HTMLButtonElement | null = null;
   private taskPanelData: TaskPanelData | null = null;
+  private isTaskPanelExpanded: boolean = false;
 
   // Callbacks
   onSyncFeishu: (() => Promise<void>) | null = null;
@@ -265,15 +268,17 @@ export class FocusPlannerView extends ItemView {
     // Calendar container
     this.calendarContainer = mainContent.createDiv({ cls: 'focus-planner-calendar' });
 
+    const taskPanelToggleRail = mainContent.createDiv({ cls: 'task-panel-toggle-rail' });
+    this.createTaskPanelToggle(taskPanelToggleRail);
+
     // Task panel on the right
-    this.taskPanel = mainContent.createDiv({ cls: 'focus-planner-task-panel' });
+    this.taskPanel = mainContent.createDiv({ cls: 'focus-planner-task-panel is-collapsed' });
 
     // Bottom summary bar
     this.summaryContainer = container.createDiv({ cls: 'focus-planner-summary' });
 
     // Load events for current week and render
     await this.loadEventsForCurrentWeek();
-    await this.loadTasksForPanel();
     this.renderCalendar();
     this.renderTaskPanel();
     this.updateSummaryBar();
@@ -337,6 +342,30 @@ export class FocusPlannerView extends ItemView {
     const year = this.currentWeekStart.getFullYear();
 
     element.textContent = `${year}年 ${startMonth}/${startDay} - ${endMonth}/${endDay}`;
+  }
+
+  private createTaskPanelToggle(container: HTMLElement) {
+    this.taskPanelToggle = container.createEl('button', {
+      cls: 'task-panel-toggle-btn',
+      attr: { type: 'button' },
+    });
+
+    this.taskPanelToggle.addEventListener('click', () => {
+      void this.toggleTaskPanel();
+    });
+  }
+
+  private async toggleTaskPanel() {
+    this.isTaskPanelExpanded = !this.isTaskPanelExpanded;
+    this.renderTaskPanel();
+
+    if (this.isTaskPanelExpanded && !this.taskPanelData) {
+      await this.loadTasksForPanel();
+
+      if (this.isTaskPanelExpanded) {
+        this.renderTaskPanel();
+      }
+    }
   }
 
   private async navigateWeek(offset: number) {
@@ -1206,8 +1235,24 @@ export class FocusPlannerView extends ItemView {
 
   // Render the task panel
   private renderTaskPanel() {
-    if (!this.taskPanel) return;
+    if (!this.taskPanel || !this.taskPanelToggle) return;
     this.taskPanel.empty();
+
+    const displayState = getTaskPanelDisplayState(this.isTaskPanelExpanded);
+
+    this.taskPanel.classList.toggle('is-collapsed', displayState.isCollapsed);
+    this.taskPanel.classList.toggle('is-expanded', displayState.isExpanded);
+
+    this.taskPanelToggle.empty();
+    this.taskPanelToggle.setAttribute('aria-expanded', displayState.ariaExpanded);
+    this.taskPanelToggle.setAttribute('aria-label', displayState.toggleTitle);
+    this.taskPanelToggle.setAttribute('title', displayState.toggleTitle);
+    this.taskPanelToggle.createSpan({ cls: 'task-panel-toggle-icon', text: displayState.toggleIcon });
+    this.taskPanelToggle.createSpan({ cls: 'task-panel-toggle-label', text: displayState.toggleLabel });
+
+    if (!displayState.shouldShowContent) {
+      return;
+    }
 
     // Panel header (fixed at top)
     const header = this.taskPanel.createDiv({ cls: 'task-panel-header' });
@@ -1435,6 +1480,11 @@ export class FocusPlannerView extends ItemView {
 
   // Refresh task panel (can be called externally)
   async refreshTaskPanel() {
+    if (!this.isTaskPanelExpanded && !this.taskPanelData) {
+      this.renderTaskPanel();
+      return;
+    }
+
     await this.loadTasksForPanel();
     this.renderTaskPanel();
   }
