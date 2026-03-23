@@ -211,6 +211,11 @@ export class DailyNoteParser {
     const path = this.getDailyNotePath(date);
     let file = this.app.vault.getAbstractFileByPath(path) as TFile;
 
+    // If no events and no existing file, skip (don't create empty notes just to clean up)
+    if (!file && events.length === 0) {
+      return { success: true, skipped: false };
+    }
+
     if (!file) {
       // Create the daily note if it doesn't exist
       await this.createDailyNote(date);
@@ -224,6 +229,11 @@ export class DailyNoteParser {
 
     let content = await this.app.vault.read(file);
 
+    // If no Day Planner section and no events, skip
+    if (!content.includes('## Day Planner') && events.length === 0) {
+      return { success: true, skipped: false };
+    }
+
     // Check if Day Planner section exists, if not, add it
     if (!content.includes('## Day Planner')) {
       content = this.addDayPlannerSection(content);
@@ -234,7 +244,9 @@ export class DailyNoteParser {
     const deduped = this.deduplicateEvents(events);
 
     const updatedContent = this.updateDayPlannerSection(content, deduped);
-    await this.app.vault.modify(file, updatedContent);
+    if (updatedContent !== content) {
+      await this.app.vault.modify(file, updatedContent);
+    }
     return { success: true, skipped: false };
   }
 
@@ -370,7 +382,10 @@ export class DailyNoteParser {
   }
 
   // Update Day Planner section with events
-  // IMPORTANT: Only update sections that have events from sync, preserve local focus time
+  // Update Day Planner section with events from sync
+  // Strategy: remove ALL event lines (containing [startTime::]) from each section,
+  // then re-add current synced events with [source:: sync] marker.
+  // Non-event lines (notes, comments) are preserved.
   private updateDayPlannerSection(content: string, events: CalendarEvent[]): string {
     // Group events by category
     const byCategory: Record<EventCategory, CalendarEvent[]> = {
@@ -390,16 +405,6 @@ export class DailyNoteParser {
       byCategory[category].sort((a, b) => a.start.getTime() - b.start.getTime());
     }
 
-    // Generate new content for each section
-    const sections: Record<EventCategory, string> = {
-      [EventCategory.FOCUS]: this.generateSectionContent(byCategory[EventCategory.FOCUS]),
-      [EventCategory.MEETING]: this.generateSectionContent(byCategory[EventCategory.MEETING]),
-      [EventCategory.PERSONAL]: this.generateSectionContent(byCategory[EventCategory.PERSONAL]),
-      [EventCategory.REST]: this.generateSectionContent(byCategory[EventCategory.REST]),
-      [EventCategory.ADMIN]: this.generateSectionContent(byCategory[EventCategory.ADMIN]),
-    };
-
-    // Replace sections in content
     let result = content;
 
     const sectionHeadings: Record<EventCategory, string> = {
@@ -412,42 +417,41 @@ export class DailyNoteParser {
 
     for (const category of Object.values(EventCategory)) {
       const heading = sectionHeadings[category];
-      const newContent = sections[category];
+      if (!result.includes(heading)) continue;
 
-      // IMPORTANT: Skip updating ANY section if no events from sync for that category
-      // This preserves locally created events (e.g., from weekly-schedule, manual creation, or calendar UI)
-      // Only update sections that have actual events from Feishu/CalDAV sync
-      if (byCategory[category].length === 0) {
-        continue;
-      }
+      // Generate new synced lines with [source:: sync] marker
+      const newSyncedLines = byCategory[category].map(event => {
+        const startTime = this.formatTime(event.start);
+        const endTime = this.formatTime(event.end);
+        return `- ${event.title} [startTime:: ${startTime}] [endTime:: ${endTime}] [source:: sync]`;
+      });
 
-      // Find and replace section
       const sectionRegex = new RegExp(
-        `(${heading.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})\\n([\\s\\S]*?)(?=\\n###|\\n##|$)`,
+        `(${heading.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\n)([\\s\\S]*?)(?=\\n###|\\n##|$)`,
         'g'
       );
 
-      if (result.includes(heading)) {
-        result = result.replace(sectionRegex, `$1\n${newContent}\n`);
-      }
+      result = result.replace(sectionRegex, (_match, headingPart, sectionContent) => {
+        // Remove ALL event lines (with [startTime::]), both old (no marker) and new (with marker)
+        // This ensures stale synced events are cleaned up regardless of format
+        // Non-event lines (notes, comments, etc.) are preserved
+        const preservedLines = (sectionContent as string)
+          .split('\n')
+          .filter((line: string) => {
+            const trimmed = line.trim();
+            if (!trimmed) return false;
+            // Remove any line that looks like an event entry
+            if (trimmed.includes('[startTime::')) return false;
+            return true;
+          });
+
+        // Combine: preserved non-event lines + new synced lines
+        const allLines = [...preservedLines, ...newSyncedLines];
+        return headingPart + (allLines.length > 0 ? allLines.join('\n') + '\n' : '\n');
+      });
     }
 
     return result;
-  }
-
-  // Generate section content from events
-  private generateSectionContent(events: CalendarEvent[]): string {
-    if (events.length === 0) {
-      return '';
-    }
-
-    return events
-      .map((event) => {
-        const startTime = this.formatTime(event.start);
-        const endTime = this.formatTime(event.end);
-        return `- ${event.title} [startTime:: ${startTime}] [endTime:: ${endTime}]`;
-      })
-      .join('\n');
   }
 
   // Format time as HH:MM

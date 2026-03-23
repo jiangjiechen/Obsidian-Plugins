@@ -4,7 +4,6 @@ import {
   DEFAULT_SETTINGS,
   CalendarEvent,
   WeeklyStats,
-  EventCategory,
 } from './types';
 import { FeishuApi } from './feishuApi';
 import { CalDavClient } from './caldavClient';
@@ -263,22 +262,42 @@ export default class FocusPlannerPlugin extends Plugin {
         feishuEvents = await this.feishuApi.getEvents(weekStart, weekEnd);
       }
 
-      // Group events by date
+      // Helper: format date as local YYYY-MM-DD (avoids UTC timezone shift issues)
+      const toLocalDateKey = (d: Date): string => {
+        const year = d.getFullYear();
+        const month = String(d.getMonth() + 1).padStart(2, '0');
+        const day = String(d.getDate()).padStart(2, '0');
+        return `${year}-${month}-${day}`;
+      };
+
+      // Group events by local date
       const eventsByDate = new Map<string, CalendarEvent[]>();
       for (const event of feishuEvents) {
-        const dateKey = event.start.toISOString().split('T')[0];
+        const dateKey = toLocalDateKey(event.start);
         if (!eventsByDate.has(dateKey)) {
           eventsByDate.set(dateKey, []);
         }
         eventsByDate.get(dateKey)!.push(event);
       }
 
-      // Write events to daily notes
+      // Generate all dates in the week range (using local dates)
+      const allDates: string[] = [];
+      const currentDate = new Date(weekStart);
+      while (currentDate <= weekEnd) {
+        allDates.push(toLocalDateKey(currentDate));
+        currentDate.setDate(currentDate.getDate() + 1);
+      }
+
+      // Write events to daily notes for ALL dates in range
+      // Dates with 0 events still need processing to clean up deleted synced events
+      // (synced events are marked with [source:: sync] and will be removed/re-added)
       const skippedDates: string[] = [];
       let syncedCount = 0;
 
-      for (const [dateStr, events] of eventsByDate) {
-        const date = new Date(dateStr);
+      for (const dateStr of allDates) {
+        const events = eventsByDate.get(dateStr) || [];
+        const [y, m, d] = dateStr.split('-').map(Number);
+        const date = new Date(y, m - 1, d);
         const result = await this.dailyNoteParser.writeEventsToDailyNote(date, events);
         if (result.skipped) {
           skippedDates.push(dateStr);

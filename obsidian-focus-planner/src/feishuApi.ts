@@ -276,28 +276,44 @@ export class FeishuApi {
     const rawItems = response.json.data?.items || [];
     console.log('[Focus Planner] Raw events from calendar', calendarId, ':', rawItems.length);
 
-    // 分开处理：单次事件（含修改后的例外实例）vs 周期日程展开的实例
+    // 分开处理：单次事件 vs 重复日程（通过 instances API 获取实际实例）
     const singleEvents: CalendarEvent[] = [];
     const recurringInstances: CalendarEvent[] = [];
 
     for (const item of rawItems) {
-      // 跳过已取消的事件
+      // 跳过已取消的事件（整个系列被删除）
       if (item.status === 'cancelled') {
         continue;
       }
 
-      // 解析事件，可能返回多个实例（重复日程）
-      const parsedEvents = this.parseFeishuEvent(item, queryStart, queryEnd);
       if (item.recurrence) {
-        // 有 RRULE 的是周期性父日程展开的实例
-        recurringInstances.push(...parsedEvents);
+        // 对重复日程，优先使用 instances API 获取实际实例（含取消状态）
+        const instances = await this.getRecurringInstances(calendarId, item.event_id, token, queryStart, queryEnd);
+        if (instances !== null) {
+          // instances API 成功：使用服务端返回的实际实例，已取消的会被过滤
+          for (const instance of instances) {
+            if (instance.status === 'cancelled') {
+              console.log('[Focus Planner] Skipping cancelled recurring instance:', instance.summary);
+              continue;
+            }
+            // 将实例作为单次事件解析（清除 recurrence 避免再次展开 RRULE）
+            const parsed = this.parseFeishuEvent({ ...instance, recurrence: undefined }, queryStart, queryEnd);
+            recurringInstances.push(...parsed);
+          }
+        } else {
+          // instances API 失败：回退到 RRULE 展开（无法过滤已取消的实例）
+          console.warn('[Focus Planner] Falling back to RRULE expansion for event:', item.summary);
+          const parsed = this.parseFeishuEvent(item, queryStart, queryEnd);
+          recurringInstances.push(...parsed);
+        }
       } else {
         // 无 RRULE 的是单次事件或修改后的例外实例（exception）
+        const parsedEvents = this.parseFeishuEvent(item, queryStart, queryEnd);
         singleEvents.push(...parsedEvents);
       }
     }
 
-    // 去重：如果某天某个标题既有单次事件（例外），又有周期展开实例，
+    // 去重：如果某天某个标题既有单次事件（例外），又有 instances API 返回的实例，
     // 优先保留单次事件（它是在飞书中修改过的例外实例）
     const exceptionKeys = new Set(
       singleEvents.map(e => `${e.title}|${e.start.toISOString().split('T')[0]}`)
@@ -315,6 +331,60 @@ export class FeishuApi {
 
     console.log('[Focus Planner] Events from calendar', calendarId, ':', events.length);
     return events;
+  }
+
+  // 获取重复日程的实际实例（通过飞书 instances API）
+  // 该 API 会返回每个实例的真实状态，包括已取消/删除的实例
+  // 返回 null 表示 API 调用失败，调用方应回退到 RRULE 展开
+  private async getRecurringInstances(
+    calendarId: string,
+    eventId: string,
+    token: string,
+    queryStart: Date,
+    queryEnd: Date
+  ): Promise<any[] | null> {
+    const encodedCalendarId = encodeURIComponent(calendarId);
+    const encodedEventId = encodeURIComponent(eventId);
+    const startTimestamp = Math.floor(queryStart.getTime() / 1000).toString();
+    const endTimestamp = Math.floor(queryEnd.getTime() / 1000).toString();
+
+    const allItems: any[] = [];
+    let pageToken: string | undefined;
+
+    try {
+      do {
+        let url = `${FEISHU_API_BASE}/calendar/v4/calendars/${encodedCalendarId}/events/${encodedEventId}/instances?start_time=${startTimestamp}&end_time=${endTimestamp}&page_size=500`;
+        if (pageToken) {
+          url += `&page_token=${encodeURIComponent(pageToken)}`;
+        }
+
+        const response = await requestUrl({
+          url,
+          method: 'GET',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json; charset=utf-8',
+          },
+          throw: false,
+        });
+
+        if (response.status !== 200 || response.json.code !== 0) {
+          console.error('[Focus Planner] instances API failed for event', eventId,
+            '- status:', response.status, 'code:', response.json?.code, 'msg:', response.json?.msg);
+          return null; // 返回 null 让调用方回退到 RRULE 展开
+        }
+
+        const items = response.json.data?.items || [];
+        allItems.push(...items);
+        pageToken = response.json.data?.has_more ? response.json.data?.page_token : undefined;
+      } while (pageToken);
+
+      console.log('[Focus Planner] Got', allItems.length, 'instances for recurring event', eventId);
+      return allItems;
+    } catch (e) {
+      console.error('[Focus Planner] Failed to fetch recurring instances:', e);
+      return null;
+    }
   }
 
   // Parse Feishu event to our CalendarEvent format

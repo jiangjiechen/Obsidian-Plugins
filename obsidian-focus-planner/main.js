@@ -46,13 +46,13 @@ function formatTaskSourceSummary(taskSources) {
 }
 
 // src/types.ts
-var EventCategory = /* @__PURE__ */ ((EventCategory3) => {
-  EventCategory3["FOCUS"] = "focus";
-  EventCategory3["MEETING"] = "meeting";
-  EventCategory3["PERSONAL"] = "personal";
-  EventCategory3["REST"] = "rest";
-  EventCategory3["ADMIN"] = "admin";
-  return EventCategory3;
+var EventCategory = /* @__PURE__ */ ((EventCategory2) => {
+  EventCategory2["FOCUS"] = "focus";
+  EventCategory2["MEETING"] = "meeting";
+  EventCategory2["PERSONAL"] = "personal";
+  EventCategory2["REST"] = "rest";
+  EventCategory2["ADMIN"] = "admin";
+  return EventCategory2;
 })(EventCategory || {});
 var CATEGORY_COLORS = {
   ["focus" /* FOCUS */]: "#22c55e",
@@ -314,10 +314,24 @@ var FeishuApi = class {
       if (item.status === "cancelled") {
         continue;
       }
-      const parsedEvents = this.parseFeishuEvent(item, queryStart, queryEnd);
       if (item.recurrence) {
-        recurringInstances.push(...parsedEvents);
+        const instances = await this.getRecurringInstances(calendarId, item.event_id, token, queryStart, queryEnd);
+        if (instances !== null) {
+          for (const instance of instances) {
+            if (instance.status === "cancelled") {
+              console.log("[Focus Planner] Skipping cancelled recurring instance:", instance.summary);
+              continue;
+            }
+            const parsed = this.parseFeishuEvent({ ...instance, recurrence: void 0 }, queryStart, queryEnd);
+            recurringInstances.push(...parsed);
+          }
+        } else {
+          console.warn("[Focus Planner] Falling back to RRULE expansion for event:", item.summary);
+          const parsed = this.parseFeishuEvent(item, queryStart, queryEnd);
+          recurringInstances.push(...parsed);
+        }
       } else {
+        const parsedEvents = this.parseFeishuEvent(item, queryStart, queryEnd);
         singleEvents.push(...parsedEvents);
       }
     }
@@ -335,6 +349,56 @@ var FeishuApi = class {
     const events = [...singleEvents, ...filteredRecurring];
     console.log("[Focus Planner] Events from calendar", calendarId, ":", events.length);
     return events;
+  }
+  // 获取重复日程的实际实例（通过飞书 instances API）
+  // 该 API 会返回每个实例的真实状态，包括已取消/删除的实例
+  // 返回 null 表示 API 调用失败，调用方应回退到 RRULE 展开
+  async getRecurringInstances(calendarId, eventId, token, queryStart, queryEnd) {
+    var _a, _b, _c, _d, _e;
+    const encodedCalendarId = encodeURIComponent(calendarId);
+    const encodedEventId = encodeURIComponent(eventId);
+    const startTimestamp = Math.floor(queryStart.getTime() / 1e3).toString();
+    const endTimestamp = Math.floor(queryEnd.getTime() / 1e3).toString();
+    const allItems = [];
+    let pageToken;
+    try {
+      do {
+        let url = `${FEISHU_API_BASE}/calendar/v4/calendars/${encodedCalendarId}/events/${encodedEventId}/instances?start_time=${startTimestamp}&end_time=${endTimestamp}&page_size=500`;
+        if (pageToken) {
+          url += `&page_token=${encodeURIComponent(pageToken)}`;
+        }
+        const response = await (0, import_obsidian.requestUrl)({
+          url,
+          method: "GET",
+          headers: {
+            "Authorization": `Bearer ${token}`,
+            "Content-Type": "application/json; charset=utf-8"
+          },
+          throw: false
+        });
+        if (response.status !== 200 || response.json.code !== 0) {
+          console.error(
+            "[Focus Planner] instances API failed for event",
+            eventId,
+            "- status:",
+            response.status,
+            "code:",
+            (_a = response.json) == null ? void 0 : _a.code,
+            "msg:",
+            (_b = response.json) == null ? void 0 : _b.msg
+          );
+          return null;
+        }
+        const items = ((_c = response.json.data) == null ? void 0 : _c.items) || [];
+        allItems.push(...items);
+        pageToken = ((_d = response.json.data) == null ? void 0 : _d.has_more) ? (_e = response.json.data) == null ? void 0 : _e.page_token : void 0;
+      } while (pageToken);
+      console.log("[Focus Planner] Got", allItems.length, "instances for recurring event", eventId);
+      return allItems;
+    } catch (e) {
+      console.error("[Focus Planner] Failed to fetch recurring instances:", e);
+      return null;
+    }
   }
   // Parse Feishu event to our CalendarEvent format
   // 处理重复日程，返回在查询范围内的所有实例
@@ -1353,6 +1417,9 @@ var DailyNoteParser = class {
   async writeEventsToDailyNote(date, events) {
     const path2 = this.getDailyNotePath(date);
     let file = this.app.vault.getAbstractFileByPath(path2);
+    if (!file && events.length === 0) {
+      return { success: true, skipped: false };
+    }
     if (!file) {
       await this.createDailyNote(date);
       file = this.app.vault.getAbstractFileByPath(path2);
@@ -1363,13 +1430,18 @@ var DailyNoteParser = class {
       console.log(`[Focus Planner] Created daily note: ${path2}`);
     }
     let content = await this.app.vault.read(file);
+    if (!content.includes("## Day Planner") && events.length === 0) {
+      return { success: true, skipped: false };
+    }
     if (!content.includes("## Day Planner")) {
       content = this.addDayPlannerSection(content);
       console.log(`[Focus Planner] Added Day Planner section to: ${path2}`);
     }
     const deduped = this.deduplicateEvents(events);
     const updatedContent = this.updateDayPlannerSection(content, deduped);
-    await this.app.vault.modify(file, updatedContent);
+    if (updatedContent !== content) {
+      await this.app.vault.modify(file, updatedContent);
+    }
     return { success: true, skipped: false };
   }
   // Deduplicate events by title + start time + end time
@@ -1484,7 +1556,10 @@ var DailyNoteParser = class {
     return content + "\n" + dayPlannerSection;
   }
   // Update Day Planner section with events
-  // IMPORTANT: Only update sections that have events from sync, preserve local focus time
+  // Update Day Planner section with events from sync
+  // Strategy: remove ALL event lines (containing [startTime::]) from each section,
+  // then re-add current synced events with [source:: sync] marker.
+  // Non-event lines (notes, comments) are preserved.
   updateDayPlannerSection(content, events) {
     const byCategory = {
       ["focus" /* FOCUS */]: [],
@@ -1499,13 +1574,6 @@ var DailyNoteParser = class {
     for (const category of Object.values(EventCategory)) {
       byCategory[category].sort((a, b) => a.start.getTime() - b.start.getTime());
     }
-    const sections = {
-      ["focus" /* FOCUS */]: this.generateSectionContent(byCategory["focus" /* FOCUS */]),
-      ["meeting" /* MEETING */]: this.generateSectionContent(byCategory["meeting" /* MEETING */]),
-      ["personal" /* PERSONAL */]: this.generateSectionContent(byCategory["personal" /* PERSONAL */]),
-      ["rest" /* REST */]: this.generateSectionContent(byCategory["rest" /* REST */]),
-      ["admin" /* ADMIN */]: this.generateSectionContent(byCategory["admin" /* ADMIN */])
-    };
     let result = content;
     const sectionHeadings = {
       ["focus" /* FOCUS */]: "### \u{1F3AF} \u4E13\u6CE8\u65F6\u95F4",
@@ -1516,32 +1584,31 @@ var DailyNoteParser = class {
     };
     for (const category of Object.values(EventCategory)) {
       const heading = sectionHeadings[category];
-      const newContent = sections[category];
-      if (byCategory[category].length === 0) {
+      if (!result.includes(heading))
         continue;
-      }
+      const newSyncedLines = byCategory[category].map((event) => {
+        const startTime = this.formatTime(event.start);
+        const endTime = this.formatTime(event.end);
+        return `- ${event.title} [startTime:: ${startTime}] [endTime:: ${endTime}] [source:: sync]`;
+      });
       const sectionRegex = new RegExp(
-        `(${heading.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")})\\n([\\s\\S]*?)(?=\\n###|\\n##|$)`,
+        `(${heading.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\n)([\\s\\S]*?)(?=\\n###|\\n##|$)`,
         "g"
       );
-      if (result.includes(heading)) {
-        result = result.replace(sectionRegex, `$1
-${newContent}
-`);
-      }
+      result = result.replace(sectionRegex, (_match, headingPart, sectionContent) => {
+        const preservedLines = sectionContent.split("\n").filter((line) => {
+          const trimmed = line.trim();
+          if (!trimmed)
+            return false;
+          if (trimmed.includes("[startTime::"))
+            return false;
+          return true;
+        });
+        const allLines = [...preservedLines, ...newSyncedLines];
+        return headingPart + (allLines.length > 0 ? allLines.join("\n") + "\n" : "\n");
+      });
     }
     return result;
-  }
-  // Generate section content from events
-  generateSectionContent(events) {
-    if (events.length === 0) {
-      return "";
-    }
-    return events.map((event) => {
-      const startTime = this.formatTime(event.start);
-      const endTime = this.formatTime(event.end);
-      return `- ${event.title} [startTime:: ${startTime}] [endTime:: ${endTime}]`;
-    }).join("\n");
   }
   // Format time as HH:MM
   formatTime(date) {
@@ -3818,18 +3885,32 @@ var FocusPlannerPlugin = class extends import_obsidian7.Plugin {
       } else {
         feishuEvents = await this.feishuApi.getEvents(weekStart, weekEnd);
       }
+      const toLocalDateKey = (d) => {
+        const year = d.getFullYear();
+        const month = String(d.getMonth() + 1).padStart(2, "0");
+        const day = String(d.getDate()).padStart(2, "0");
+        return `${year}-${month}-${day}`;
+      };
       const eventsByDate = /* @__PURE__ */ new Map();
       for (const event of feishuEvents) {
-        const dateKey = event.start.toISOString().split("T")[0];
+        const dateKey = toLocalDateKey(event.start);
         if (!eventsByDate.has(dateKey)) {
           eventsByDate.set(dateKey, []);
         }
         eventsByDate.get(dateKey).push(event);
       }
+      const allDates = [];
+      const currentDate = new Date(weekStart);
+      while (currentDate <= weekEnd) {
+        allDates.push(toLocalDateKey(currentDate));
+        currentDate.setDate(currentDate.getDate() + 1);
+      }
       const skippedDates = [];
       let syncedCount = 0;
-      for (const [dateStr, events] of eventsByDate) {
-        const date = new Date(dateStr);
+      for (const dateStr of allDates) {
+        const events = eventsByDate.get(dateStr) || [];
+        const [y, m, d] = dateStr.split("-").map(Number);
+        const date = new Date(y, m - 1, d);
         const result = await this.dailyNoteParser.writeEventsToDailyNote(date, events);
         if (result.skipped) {
           skippedDates.push(dateStr);

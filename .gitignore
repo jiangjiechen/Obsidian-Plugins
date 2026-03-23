@@ -19,3 +19,5 @@ pnpm-debug.log*
 # OS metadata
 .DS_Store
 .claude/
+.agents/
+skills-lock.json
