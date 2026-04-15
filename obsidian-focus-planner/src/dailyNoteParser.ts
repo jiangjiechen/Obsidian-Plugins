@@ -288,7 +288,12 @@ export class DailyNoteParser {
     const next = new Date(d);
     next.setDate(d.getDate() + 1);
 
-    const formatDate = (dt: Date) => dt.toISOString().split('T')[0];
+    const formatDate = (dt: Date) => {
+      const y = dt.getFullYear();
+      const m = String(dt.getMonth() + 1).padStart(2, '0');
+      const dd = String(dt.getDate()).padStart(2, '0');
+      return `${y}-${m}-${dd}`;
+    };
     const prevStr = formatDate(prev);
     const nextStr = formatDate(next);
 
