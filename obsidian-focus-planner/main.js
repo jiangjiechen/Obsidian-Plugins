@@ -1474,7 +1474,12 @@ var DailyNoteParser = class {
     prev.setDate(d.getDate() - 1);
     const next = new Date(d);
     next.setDate(d.getDate() + 1);
-    const formatDate = (dt) => dt.toISOString().split("T")[0];
+    const formatDate = (dt) => {
+      const y = dt.getFullYear();
+      const m = String(dt.getMonth() + 1).padStart(2, "0");
+      const dd = String(dt.getDate()).padStart(2, "0");
+      return `${y}-${m}-${dd}`;
+    };
     const prevStr = formatDate(prev);
     const nextStr = formatDate(next);
     const getISOWeek = (dt) => {
@@ -1557,9 +1562,9 @@ var DailyNoteParser = class {
   }
   // Update Day Planner section with events
   // Update Day Planner section with events from sync
-  // Strategy: remove ALL event lines (containing [startTime::]) from each section,
+  // Strategy: remove only synced event lines (containing both [startTime::] and [source:: sync]),
   // then re-add current synced events with [source:: sync] marker.
-  // Non-event lines (notes, comments) are preserved.
+  // Locally created events (without [source:: sync]) and non-event lines are preserved.
   updateDayPlannerSection(content, events) {
     const byCategory = {
       ["focus" /* FOCUS */]: [],
@@ -1600,7 +1605,7 @@ var DailyNoteParser = class {
           const trimmed = line.trim();
           if (!trimmed)
             return false;
-          if (trimmed.includes("[startTime::"))
+          if (trimmed.includes("[startTime::") && trimmed.includes("[source:: sync]"))
             return false;
           return true;
         });
