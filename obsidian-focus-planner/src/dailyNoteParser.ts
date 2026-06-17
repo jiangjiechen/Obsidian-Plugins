@@ -388,9 +388,9 @@ export class DailyNoteParser {
 
   // Update Day Planner section with events
   // Update Day Planner section with events from sync
-  // Strategy: remove ALL event lines (containing [startTime::]) from each section,
+  // Strategy: remove only synced event lines (containing both [startTime::] and [source:: sync]),
   // then re-add current synced events with [source:: sync] marker.
-  // Non-event lines (notes, comments) are preserved.
+  // Locally created events (without [source:: sync]) and non-event lines are preserved.
   private updateDayPlannerSection(content: string, events: CalendarEvent[]): string {
     // Group events by category
     const byCategory: Record<EventCategory, CalendarEvent[]> = {
@@ -445,8 +445,8 @@ export class DailyNoteParser {
           .filter((line: string) => {
             const trimmed = line.trim();
             if (!trimmed) return false;
-            // Remove any line that looks like an event entry
-            if (trimmed.includes('[startTime::')) return false;
+            // Only remove synced event lines; preserve locally created events
+            if (trimmed.includes('[startTime::') && trimmed.includes('[source:: sync]')) return false;
             return true;
           });
 
