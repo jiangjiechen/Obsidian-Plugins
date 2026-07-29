@@ -80,9 +80,15 @@
   gap: 10px;
   padding: 2px 2px 6px 2px;
   min-height: 0;
-  max-height: calc(100% - 60px);
   scrollbar-width: thin;
   scrollbar-color: var(--background-modifier-border) transparent;
+}
+
+/* 下排象限：Obsidian 状态栏浮在窗口右下角，留出可滚动的安全距离，
+   否则最后一张卡片停在状态栏下方，看得见却点不到 */
+.q-nIU .eisenhower-list,
+.q-nInU .eisenhower-list {
+  padding-bottom: 36px;
 }
 
 /* ===== 卡片：信息层级 + 动效 ===== */
