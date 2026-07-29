@@ -1,6 +1,6 @@
 {
   "name": "obsidian-eisenhower-todos",
-  "version": "0.1.0",
+  "version": "1.1.0",
   "private": true,
   "scripts": {
     "build": "esbuild main.ts --bundle --external:obsidian --format=cjs --platform=node --outfile=main.js --sourcemap",

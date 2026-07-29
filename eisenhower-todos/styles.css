@@ -2,8 +2,8 @@
 .eisenhower-outer {
   display: flex;
   flex-direction: column;
-  height: 100vh;
-  max-height: 100vh;
+  height: 100%;
+  max-height: 100%;
   overflow: hidden;
 }
 
@@ -206,9 +206,221 @@
   gap: 8px;
   margin-bottom: 8px;
 }
+.card-topline .task-title {
+  flex: 1;
+}
 .card-done-box {
   flex-shrink: 0;
   margin-top: 2px;
+}
+
+/* 分组按钮启用态 */
+.eis-group-btn-on {
+  border-color: var(--interactive-accent);
+  color: var(--text-normal);
+  background: color-mix(in oklab, var(--interactive-accent) 15%, var(--background-modifier-hover));
+}
+
+/* ===== 分组小节 ===== */
+.eis-group-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 4px 2px 2px;
+  cursor: pointer;
+  user-select: none;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+.eis-group-header:hover {
+  color: var(--text-normal);
+}
+.eis-group-arrow {
+  font-size: 10px;
+  width: 12px;
+  text-align: center;
+}
+.eis-group-name {
+  font-weight: 600;
+}
+.eis-group-count {
+  font-size: 10px;
+  padding: 0 6px;
+  border-radius: 999px;
+  border: 1px solid var(--background-modifier-border);
+  background: var(--background-modifier-hover);
+}
+
+/* ===== 子任务紧凑行 ===== */
+.card-children {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 0 0 6px 22px;
+}
+.card-child-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  font-size: 12px;
+  line-height: 1.35;
+  color: var(--text-muted);
+  cursor: pointer;
+  border-radius: 4px;
+  padding: 1px 2px;
+}
+.card-child-row:hover {
+  background: var(--background-modifier-hover);
+  color: var(--text-normal);
+}
+.card-child-box {
+  flex-shrink: 0;
+  margin-top: 2px;
+  transform: scale(.85);
+}
+.card-child-text {
+  flex: 1;
+  word-break: break-word;
+}
+.card-progress {
+  flex-shrink: 0;
+  font-size: 10px;
+  color: var(--text-muted);
+  padding: 1px 6px;
+  border-radius: 999px;
+  border: 1px solid var(--background-modifier-border);
+  background: var(--background-modifier-hover);
+  margin-top: 1px;
+}
+
+/* ===== 今日聚焦 pin ===== */
+.card-pin-btn {
+  flex-shrink: 0;
+  background: none;
+  border: none;
+  padding: 0 2px;
+  font-size: 13px;
+  line-height: 1.35;
+  cursor: pointer;
+  filter: grayscale(1);
+  opacity: .25;
+  transition: opacity .12s ease, filter .12s ease;
+}
+.card-pin-btn:hover {
+  opacity: .7;
+}
+.card-pin-btn.is-pinned {
+  filter: none;
+  opacity: 1;
+}
+
+.eisenhower-card.card-pinned {
+  border-color: var(--interactive-accent);
+  box-shadow: 0 0 0 1px color-mix(in oklab, var(--interactive-accent) 45%, transparent);
+}
+
+.eis-pin-banner {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  font-size: 12px;
+  background: color-mix(in oklab, var(--interactive-accent) 10%, var(--background-secondary));
+  border-bottom: 1px solid var(--background-modifier-border);
+  flex-shrink: 0;
+}
+.eis-pin-banner-text {
+  flex: 1;
+  color: var(--text-normal);
+}
+.eis-pin-banner-btn {
+  font-size: 11px;
+  padding: 2px 10px;
+  border-radius: 6px;
+  border: 1px solid var(--background-modifier-border);
+  background: var(--background-primary);
+  cursor: pointer;
+  transition: border-color .15s ease;
+}
+.eis-pin-banner-btn:hover {
+  border-color: var(--interactive-accent);
+}
+.eis-pin-banner-clear {
+  color: var(--text-muted);
+}
+
+/* ===== 完成撤销缓冲 ===== */
+.eisenhower-card.card-done-pending {
+  opacity: .55;
+}
+.card-done-pending .task-title {
+  text-decoration: line-through;
+  color: var(--text-muted);
+}
+.card-undo-btn {
+  flex-shrink: 0;
+  font-size: 11px;
+  padding: 2px 10px;
+  border-radius: 6px;
+  border: 1px solid var(--interactive-accent);
+  background: color-mix(in oklab, var(--interactive-accent) 15%, var(--background-primary));
+  color: var(--text-normal);
+  cursor: pointer;
+}
+.card-undo-btn:hover {
+  background: color-mix(in oklab, var(--interactive-accent) 30%, var(--background-primary));
+}
+
+/* ===== 周滚动向导 ===== */
+.eis-rollover-progress {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin-bottom: 4px;
+}
+.eis-rollover-title {
+  margin: 4px 0 10px 0;
+  line-height: 1.4;
+}
+.eis-rollover-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+  margin-bottom: 16px;
+  font-size: 12px;
+}
+.eis-rollover-overdue {
+  color: #dc2626;
+  border-color: #dc2626;
+}
+.eis-rollover-file {
+  color: var(--text-muted);
+  font-size: 11px;
+}
+.eis-rollover-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.eis-rollover-btn {
+  font-size: 13px;
+  padding: 6px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--background-modifier-border);
+  background: var(--background-modifier-hover);
+  cursor: pointer;
+  transition: border-color .12s ease, background .12s ease;
+}
+.eis-rollover-btn:hover {
+  border-color: var(--interactive-accent);
+}
+.eis-rollover-primary {
+  border-color: var(--interactive-accent);
+  background: color-mix(in oklab, var(--interactive-accent) 18%, var(--background-modifier-hover));
+}
+.eis-rollover-summary {
+  font-size: 14px;
+  margin-bottom: 12px;
 }
 
 /* 底部：时间chips */
@@ -291,6 +503,20 @@
 .chip-tag {
   font-weight: 500;
   font-size: 10px;
+}
+
+/* 文本搜索chip样式 */
+.chip-text {
+  border-color: var(--background-modifier-border);
+  background: var(--background-modifier-hover);
+  color: var(--text-normal);
+  font-weight: 500;
+  font-style: italic;
+}
+
+.eis-search-suggestion {
+  font-size: 12px;
+  color: var(--text-muted);
 }
 
 /* 标签chip颜色变量，通过JavaScript动态设置 */
